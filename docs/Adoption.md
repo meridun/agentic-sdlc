@@ -13,6 +13,10 @@ How to wire this template into a real repo. ~30 minutes for a first pass.
 Name the agent something project-scoped (e.g. `acme-sdlc-worker`) and use that everywhere `<WORKER_AGENT>`
 appears.
 
+- *(optional)* `skills/documentation-tiers/` → your harness's skill dir (Claude Code:
+  `.claude/skills/documentation-tiers/`). Copy it if the ship stage's docs fan-out should follow the
+  hub-and-spoke tier discipline; skip it if your docs are a flat README.
+
 ## 2. Create the labels
 
 Run the `gh` script in [labels.md](labels.md). It creates the `stage:*`, `sdlc:*`, and `priority:*`
@@ -39,6 +43,8 @@ Grep for `<` across `prompts/` and `agents/` and replace every one. The full lis
 | `<INVARIANTS>` | Project rules that are ACs on **every** change — list them | `no breaking API changes; all endpoints authz-checked; no PII in logs` |
 | `<DECISION_RECORD>` | Where decisions are logged (a doc section, a registry file) | `docs/Decisions.md` |
 | `<DOCS_SINKS>` | Documentation targets ship fans out to | `README.md, docs/API.md` |
+| `<DOCS_ROOT>` | *(optional, docs-tiers skill)* root of the L3 documentation tree | `docs/` |
+| `<DOC_DOMAINS>` | *(optional, docs-tiers skill)* thematic domain prefixes files route into | `Architecture_*, Testing_*, UserGuide_*` |
 | `<TOKEN_TOOL>` | *(optional)* shell-output compactor to prefix commands with; delete the mentions if none | `rtk` |
 
 `<INVARIANTS>` is the one that most repays effort — it is the shared acceptance criterion build

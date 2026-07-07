@@ -51,6 +51,7 @@ The full narrative — why each rule exists, the failure modes it prevents — i
 | [`prompts/sdlc/dispatch.md`](prompts/sdlc/dispatch.md) | The **dispatcher** prompt behind the scheduled task. Singleton gate, wip reaping, git/worktree maintenance, per-lane fan-out. |
 | [`prompts/sdlc/{intake,build,verify,audit,ship}.md`](prompts/sdlc/) | The five **stage workers**. Each defines only its own WORK and EMIT specifics. |
 | [`agents/sdlc-worker.md`](agents/sdlc-worker.md) | The **isolated worker agent** definition — deliberately has no delegation tool. Ships in Claude Code (`.claude/agents/`) and GitHub Copilot (`.github/agents/`) frontmatter variants. |
+| [`skills/documentation-tiers/SKILL.md`](skills/documentation-tiers/SKILL.md) | The **docs-tier discipline** the ship stage's docs fan-out routes to — hub-and-spoke L1/L2/L3 tiering, naming, sizing, thematic placement. Optional; copy into your harness's skill dir. |
 | [`docs/AgenticSDLC.md`](docs/AgenticSDLC.md) | The model, the invariants, and the two concurrency variants (serial vs. per-issue). |
 | [`docs/Adoption.md`](docs/Adoption.md) | Step-by-step: labels to create, placeholders to fill, the scheduled task to register. |
 | [`docs/labels.md`](docs/labels.md) | The `stage:*` / `sdlc:*` / `priority:*` label taxonomy, with a `gh` script to create them. |
