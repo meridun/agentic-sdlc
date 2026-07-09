@@ -86,7 +86,8 @@ never discard or overwrite uncommitted files — in the main tree or any worktre
 4. **Worktree sweep:** `git worktree list`. For each `<WORKTREE_ROOT>/<issue#>` worktree whose branch
    is merged to `<DEFAULT_BRANCH>` (checks in step 5) or deleted upstream with the issue closed: if
    its tree is clean, `git worktree remove` it; dirty → leave it, record it. Finish with
-   `git worktree prune`.
+   `git worktree prune`. Touch ONLY worktrees matching the `<WORKTREE_ROOT>/<issue#>` pattern —
+   never human worktrees elsewhere.
 5. Prune local branches merged to `<DEFAULT_BRANCH>`: for every branch in
    `git branch --merged <DEFAULT_BRANCH>` except `<DEFAULT_BRANCH>`, `<PROD_BRANCH>`, and any branch
    checked out in a worktree — confirm `git merge-base --is-ancestor <branch> <DEFAULT_BRANCH>`, then
@@ -108,7 +109,21 @@ For each lane (intake, build, verify, audit, ship):
 1. Eligible = open, `stage:<lane>`, not `sdlc:wip` / `sdlc:needs-human` / `sdlc:hold`. Decide from
    the Step 0 snapshot; re-query the lane fresh ONLY if an earlier worker this cycle ADVANCEd an item
    into it. Zero eligible → skip the lane; record `<LANE>: skipped (empty)`.
-2. Otherwise spawn ONE subagent, `subagent_type: <WORKER_AGENT>`, with this prompt (substitute the
+2. Otherwise spawn ONE subagent, `subagent_type: <WORKER_AGENT>`, **with the lane's `model` set
+   explicitly — never let a worker inherit the dispatcher's model** (the dispatcher itself may be
+   downsized). Route volume work to the cheapest model that reliably does it:
+
+   | Lane | Tier | Why |
+   |---|---|---|
+   | intake | mid (sonnet-class) | triage + label routing; mechanical with light judgment |
+   | design *(if run)* | high (opus-class) | settling approach/UX is the pipeline's most open-ended judgment |
+   | build | high (opus-class) | code synthesis to AC; wrong-but-plausible code is the costliest failure |
+   | verify | high (opus-class) | adversarial verification — evidence judgment, not just command-running |
+   | audit | high (opus-class) | security judgment — deliberately never downsized |
+   | ship | mid (sonnet-class) | docs fan-out + PR ritual; template-shaped work |
+
+   Escalate a lane one tier only after its worker BOUNCEs the same issue twice for
+   capability-shaped reasons (not genuinely-broken code). Prompt (substitute the
    lane and run-id): "You are an autonomous SDLC pipeline worker for the `<PROJECT>` project.
    Repository (local working directory): `<REPO_PATH>`. Your run-id is `<run-id>-<lane>`. Read
    prompts/sdlc/README.md — its universal worker loop and invariants are binding. Then execute the
@@ -118,7 +133,9 @@ For each lane (intake, build, verify, audit, ship):
    concurrently — spawn all non-empty lanes' workers in one batch and wait for all. Exception: run
    intake before the batch when its merge sweep has pending merges to process, and run a lane serially
    after the batch if it only became non-empty via an ADVANCE this cycle. Never spawn two workers for
-   the same lane in one cycle.
+   the same lane in one cycle. The intake-first exception is load-bearing: intake's merge sweep is the
+   only thing that processes merged PRs, so skipping intake because its lane looks empty would skip the
+   merge sweep entirely — run it whenever merges are pending, even with zero `stage:intake` items.
 4. **Self-heal check (after each worker finishes):** parse the claimed issue # from the worker's
    result, then `gh issue view <n> --json labels` plus its latest `sdlc:claim` comment. If it still
    carries `sdlc:wip` AND the claim's run-id belongs to this cycle (`<run-id>-<lane>`): resume that

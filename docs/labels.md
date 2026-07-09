@@ -22,6 +22,14 @@ The pipeline is driven entirely by GitHub labels. Create these once per repo.
 | `blocked` | `#d876e3` | *(optional)* Item bounced to queued as not-yet-buildable; readiness axis. |
 | `ready` | `#0e8a16` | *(optional)* Blocker cleared; complements `blocked`. |
 
+## Zero stage labels is not (usually) corrupt
+
+An open issue with **zero** `stage:*` labels is a **legitimate** state: post-ship awaiting PR merge
+(ship's ADVANCE removes the stage; the merge closes the issue), the `sdlc:dispatch-lock` issue, or
+an issue simply not (yet) triaged into the pipeline. It is corrupt only when `sdlc:wip` or
+`sdlc:needs-human` remains on it — a machine flag with no lane means a worker died mid-transition.
+**Multiple** `stage:*` labels are always corrupt (the item is eligible in two lanes at once).
+
 ## Create them (`gh`)
 
 Run from the repo, authenticated with `repo` scope. `--force` makes it idempotent (updates colour if

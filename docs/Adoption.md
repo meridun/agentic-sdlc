@@ -44,7 +44,20 @@ Grep for `<` across `prompts/` and `agents/` and replace every one. The full lis
 `<INVARIANTS>` is the one that most repays effort — it is the shared acceptance criterion build
 implements to, verify exercises, and audit reviews for. Be specific and concrete.
 
-## 4. Choose your variant
+## 4. Copy the reference CLI (recommended)
+
+Copy `tools/sdlc.mjs` into your repo (plain Node, no dependencies) and adapt the constants at the
+top — `DEFAULT_BRANCH`, `PROD_BRANCH`, and the worktree naming function. Then wire the lane prompts
+to it: wherever a prompt describes the claim lock, stage swap, or dispatcher gate ritual, have
+workers run the CLI one-shot instead (`node tools/sdlc.mjs claim|advance|gate|lock|lanes|…`).
+
+Why bother: `advance` validates every transition against the stage graph, which kills the
+hand-typed label-typo class (`stage:verfy`) by construction, and it makes the gate, dispatcher
+lock, and claim-verify race check deterministic — the agent supplies judgment (what to spawn, what
+to write in comments), the CLI supplies the state math. The pure helpers are exported and the
+gh/git executors injectable, so you can unit-test your adaptations without touching GitHub.
+
+## 5. Choose your variant
 
 - Small backlog / single tree → **serial** (see [AgenticSDLC.md](AgenticSDLC.md#concurrency-variants);
   simplify `dispatch.md` per the note there, and you can ignore the worktree steps).
@@ -52,17 +65,17 @@ implements to, verify exercises, and audit reviews for. Be specific and concrete
   issue once (`gh issue create --title sdlc:dispatch-lock --body "dispatcher mutex" --label sdlc:hold`,
   then pin it), and confirm your platform allows git worktrees.
 
-Decide whether you want the optional `stage:design` lane (add the label + a `design.md` worker) or fold
-design into intake (shipped default).
+Decide whether you want the optional `stage:design` lane (add the label + the shipped
+`prompts/sdlc/design.md` worker) or fold design into intake (shipped default).
 
-## 5. Dry-run manually before scheduling
+## 6. Dry-run manually before scheduling
 
 Paste `prompts/sdlc/README.md` + one stage file (start with `intake.md`) into an agent session pointed
 at your repo. Feed it a real issue labeled `stage:intake`. Watch it CLAIM, WORK, and EMIT. The prompt
 behaves identically whether a human or a scheduler fired it — so a clean manual pass means the
 scheduled one will work. Walk one issue all the way through intake → ship this way before automating.
 
-## 6. Schedule the dispatcher
+## 7. Schedule the dispatcher
 
 Register a recurring task whose body is a **thin pointer** to `dispatch.md`, e.g.:
 
@@ -77,7 +90,12 @@ Cadence: hourly is typical (the 2h reap threshold assumes ≤ hourly). Options:
 **Enable it only once your queue depth justifies the spend** — each cycle costs tokens per non-empty
 lane. Until then, run it manually on demand.
 
-## 7. Watch the first few cycles
+**Dispatcher sizing:** keep the dispatcher itself mid-tier (sonnet-class) even once its steps are
+CLI-scripted — a dispatch failure is systemic (a whole cycle misroutes), not per-issue like a worker
+failure. Consider dropping it to a small model (haiku-class) only after the worktree sweep and
+conflict scan are scripted too and you've observed several clean cycles.
+
+## 8. Watch the first few cycles
 
 The dispatcher's digest (end of every run) is your dashboard: lock result, git maintenance, one line
 per lane, queue depths, parked items, and **token cost per lane + cycle total**. That token line is the
