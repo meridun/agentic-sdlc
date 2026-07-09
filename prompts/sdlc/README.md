@@ -51,6 +51,11 @@ pipeline folds design questions into intake as decision debates.
 
    The lock is machine-owned and volatile; the dispatcher's reaper may strip it, and it checks the
    claim comment's run-id + timestamp before doing so.
+
+   If your repo carries the reference CLI (`tools/sdlc.mjs`, see `docs/Adoption.md`), steps 1–3
+   collapse into one deterministic command: `node tools/sdlc.mjs claim <issue> <run-id> <lane>
+   --verify` adds the label, posts the claim comment, and runs the race check — a non-zero exit
+   means you lost the race: walk away and pick the next eligible item.
 2. **WORK** — per the lane file, with these constraints:
    - **Never delegate — do all work inline, yourself.** No subagents (in an async harness they run
      detached; the worker yields and nothing resumes it — the item strands under `sdlc:wip`), no
@@ -109,6 +114,7 @@ proven at verify, and audited at audit:
 |---|---|---|
 | [`dispatch.md`](dispatch.md) | *(dispatcher — runs every lane)* | scheduled task; git/worktree maintenance + per-lane fan-out |
 | [`intake.md`](intake.md) | `stage:intake` → `stage:queued` | triage, dedup, decision debates + merge sweep |
+| [`design.md`](design.md) | `stage:design` → `stage:queued` | *(optional lane)* settle approach/UX before build; omit if folding design into intake |
 | [`build.md`](build.md) | `stage:build` → `stage:verify` | plan comment → implement + targeted tests |
 | [`verify.md`](verify.md) | `stage:verify` → `stage:audit` | full suite + real-run smoke |
 | [`audit.md`](audit.md) | `stage:audit` → `stage:ship` | read-only security/invariant review of the diff |
