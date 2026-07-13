@@ -5,7 +5,7 @@ Stage: `stage:design` → `stage:queued`
 Settles approach/UX before build starts, so build isn't guessing at requirements. This lane is a
 per-project choice — the shipped default folds design questions into intake as decision debates
 (see [`README.md`](README.md)). If you adopt it, add the `stage:design` label from
-`docs/labels.md` and include `design` in the dispatcher's lane list.
+`docs/Labels.md` and include `design` in the dispatcher's lane list.
 
 ---
 

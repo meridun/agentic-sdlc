@@ -64,7 +64,7 @@ merge-and-close. Multi-repo forks make the tail explicit; both forms conform.
 - `priority:critical` › `priority:medium` › `priority:future` — CLAIM order within a lane, then FIFO by
   creation date.
 
-Full `gh`-scriptable list: [labels.md](labels.md).
+Full `gh`-scriptable list: [Labels.md](Labels.md).
 
 ## Concurrency variants
 

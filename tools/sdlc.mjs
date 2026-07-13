@@ -251,7 +251,7 @@ export function lastLabeledAt(timelineEvents, label) {
  * Eligible = has that stage, not wip and not parked/hold; ordered exactly as a
  * worker's CLAIM would pick — priority (critical › medium › future › none),
  * then FIFO by createdAt. `integrity` lists every issue whose stage-label
- * state is corrupt (see the zero-vs-flagged rule below and docs/labels.md).
+ * state is corrupt (see the zero-vs-flagged rule below and docs/Labels.md).
  */
 export function computeLanes(issues) {
   const norm = (issues ?? []).map((i) => ({

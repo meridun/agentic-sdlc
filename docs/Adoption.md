@@ -19,7 +19,7 @@ appears.
 
 ## 2. Create the labels
 
-Run the `gh` script in [labels.md](labels.md). It creates the `stage:*`, `sdlc:*`, and `priority:*`
+Run the `gh` script in [Labels.md](Labels.md). It creates the `stage:*`, `sdlc:*`, and `priority:*`
 labels the prompts depend on.
 
 ## 3. Fill the placeholders

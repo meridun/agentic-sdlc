@@ -61,7 +61,7 @@ The full narrative — why each rule exists, the failure modes it prevents — i
 | [`skills/documentation-tiers/SKILL.md`](skills/documentation-tiers/SKILL.md) | The **docs-tier discipline** the ship stage's docs fan-out routes to — hub-and-spoke L1/L2/L3 tiering, naming, sizing, thematic placement. Optional; copy into your harness's skill dir. |
 | [`docs/AgenticSDLC.md`](docs/AgenticSDLC.md) | The model, the invariants, and the two concurrency variants (serial vs. per-issue). |
 | [`docs/Adoption.md`](docs/Adoption.md) | Step-by-step: labels to create, placeholders to fill, the scheduled task to register. |
-| [`docs/labels.md`](docs/labels.md) | The `stage:*` / `sdlc:*` / `priority:*` label taxonomy, with a `gh` script to create them. |
+| [`docs/Labels.md`](docs/Labels.md) | The `stage:*` / `sdlc:*` / `priority:*` label taxonomy, with a `gh` script to create them. |
 | [`docs/Composability.md`](docs/Composability.md) | **One spec, many forks** — the 9-stage canonical spine, the five variation points (tracker, topology, modules, dispatcher, quality bars), and the per-fork conformance profile. |
 | [`docs/profiles/work-ado.example.md`](docs/profiles/work-ado.example.md) | A **worked conformance profile** — a multi-repo Azure DevOps fork declared against the spec. |
 
@@ -71,7 +71,7 @@ The full narrative — why each rule exists, the failure modes it prevents — i
 
 1. **Copy** `prompts/` and `agents/` into your repo (agents go under `.claude/agents/` and/or
    `.github/agents/`).
-2. **Create the labels** — run the script in [docs/labels.md](docs/labels.md).
+2. **Create the labels** — run the script in [docs/Labels.md](docs/Labels.md).
 3. **Fill the placeholders** — grep for `<` across `prompts/`; [docs/Adoption.md](docs/Adoption.md)
    lists every one and what it means (`<PROJECT>`, `<REPO_PATH>`, `<DEFAULT_BRANCH>`, `<TEST_CMD>`,
    `<INVARIANTS>`, …).
