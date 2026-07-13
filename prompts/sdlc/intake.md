@@ -37,6 +37,25 @@ All inline, read-only (no code changes, no branches):
 - **Duplicate/overlap search:**
   `gh issue list --search "<keywords>" --state all --limit 30 --json number,title,state`. An existing
   issue covering the same thing is a close-as-dup; a partial overlap is a scope note.
+- **In-progress collision sweep** — does work on this already exist somewhere, even without a matching
+  issue title? Three probes, cheap to expensive; stop as soon as one is conclusive:
+  1. **Remote branches:** `git fetch origin && git branch -r`. Branch names follow
+     `<type>/<issue#>-<slug>` — scan for a slug that matches this issue's subject or an issue# whose
+     issue covers the same ground. On a candidate, `git log origin/<DEFAULT_BRANCH>..origin/<branch>
+     --oneline` and `git diff --name-only origin/<DEFAULT_BRANCH>...origin/<branch>` to see what it
+     actually changes.
+  2. **Open PRs by touched paths:** `gh pr list --state open --json number,title,headRefName,files` —
+     a PR touching the files this issue would touch is a collision even if the titles don't match.
+  3. **In-flight issues in later lanes:** `gh issue list --label stage:build --json number,title`
+     (likewise `stage:verify` / `stage:audit` / `stage:ship`) — an item already past queued may
+     subsume or conflict with this one; read its plan comment, not just its title.
+
+  Verdicts: same work in flight → close as dup linking the live item (or its issue). Partial overlap
+  where this issue can't proceed until the in-flight work lands → comment "blocked by #n", apply the
+  `blocked` label (the merge sweep flips it to `ready` when the blocker merges), and still EMIT
+  normally on the rest of the triage. Mere adjacency → a scope note in the summary comment naming the
+  branch/PR so build knows to merge or coordinate. Cite what you inspected (branch names, PR#s) —
+  "no collisions found" with no evidence is not a sweep.
 - **Docs + code assessment:** read the issue and any comments, then check whether it conflicts with or
   duplicates shipped/decided behavior — `<DECISION_RECORD>` first, then the project's scope/roadmap
   docs and non-goals, then the code.
@@ -78,7 +97,8 @@ One-line result: `INTAKE: <#issue> → ADVANCE(queued)|PARK|CLOSE — <reason>`
   the winner of a debate — it frames and parks; the human decides in-thread; the next pass graduates
   the answer into `<DECISION_RECORD>`.
 - **`gh` is in scope here** — intake's duplicate search legitimately uses it inline even though the
-  research approach is otherwise read-only.
+  research approach is otherwise read-only. The collision sweep's git commands (`fetch`, `branch -r`,
+  `log`, `diff`) are read-only too — they inspect remote branches without checking anything out.
 - **Idempotent:** a prior intake summary comment → re-confirm the verdict cheaply, don't re-research. A
   PARKed item with an in-thread answer should ADVANCE next pass. A **reopened** issue is reconciled, not
   re-triaged from scratch: if the evidence (merged PR, code on `<DEFAULT_BRANCH>`) shows it already
