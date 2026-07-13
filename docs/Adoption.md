@@ -74,14 +74,21 @@ gh/git executors injectable, so you can unit-test your adaptations without touch
 Decide whether you want the optional `stage:design` lane (add the label + the shipped
 `prompts/sdlc/design.md` worker) or fold design into intake (shipped default).
 
-## 6. Dry-run manually before scheduling
+## 6. Write your conformance profile
+
+Create `prompts/sdlc/PROFILE.md` from the skeleton in
+[Composability.md](Composability.md#the-conformance-profile), declaring your bindings for the five
+variation points and any known deviations. This is what keeps ad-hoc drift audits against the spec
+cheap. A worked ADO example lives at [profiles/work-ado.example.md](profiles/work-ado.example.md).
+
+## 7. Dry-run manually before scheduling
 
 Paste `prompts/sdlc/README.md` + one stage file (start with `intake.md`) into an agent session pointed
 at your repo. Feed it a real issue labeled `stage:intake`. Watch it CLAIM, WORK, and EMIT. The prompt
 behaves identically whether a human or a scheduler fired it — so a clean manual pass means the
 scheduled one will work. Walk one issue all the way through intake → ship this way before automating.
 
-## 7. Schedule the dispatcher
+## 8. Schedule the dispatcher
 
 Register a recurring task whose body is a **thin pointer** to `dispatch.md`, e.g.:
 
@@ -101,7 +108,7 @@ CLI-scripted — a dispatch failure is systemic (a whole cycle misroutes), not p
 failure. Consider dropping it to a small model (haiku-class) only after the worktree sweep and
 conflict scan are scripted too and you've observed several clean cycles.
 
-## 8. Watch the first few cycles
+## 9. Watch the first few cycles
 
 The dispatcher's digest (end of every run) is your dashboard: lock result, git maintenance, one line
 per lane, queue depths, parked items, and **token cost per lane + cycle total**. That token line is the

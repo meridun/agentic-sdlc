@@ -17,6 +17,12 @@ comments say things stand.
              + route   throttle     code      it works  it's safe open PR
 ```
 
+The **canonical spine** (see [Composability.md](Composability.md)) names nine stages:
+`intake → [design] → queued → build → verify → audit → ready → shipping → complete`, with two
+human gates (`queued` and `ready`). The shipped template implements the collapsed tail: `ship`
+does docs + PR, the human merge **is** the `ready` gate, and `shipping → complete` collapse into
+merge-and-close. Multi-repo forks make the tail explicit; both forms conform.
+
 ## The five invariants that make it safe
 
 1. **One issue per pass, one outcome per pass.** A worker CLAIMs one issue, does the stage's work, and

@@ -55,6 +55,7 @@ The full narrative — why each rule exists, the failure modes it prevents — i
 | [`docs/AgenticSDLC.md`](docs/AgenticSDLC.md) | The model, the invariants, and the two concurrency variants (serial vs. per-issue). |
 | [`docs/Adoption.md`](docs/Adoption.md) | Step-by-step: labels to create, placeholders to fill, the scheduled task to register. |
 | [`docs/labels.md`](docs/labels.md) | The `stage:*` / `sdlc:*` / `priority:*` label taxonomy, with a `gh` script to create them. |
+| [`docs/Composability.md`](docs/Composability.md) | **One spec, many forks** — the 9-stage canonical spine, the five variation points (tracker, topology, modules, dispatcher, quality bars), and the per-fork conformance profile. |
 
 ---
 
