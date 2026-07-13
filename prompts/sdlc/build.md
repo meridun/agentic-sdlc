@@ -89,7 +89,10 @@ One-line result:
 - **Minimal change.** Build only to the acceptance criteria; a good idea spotted mid-build is a new
   issue, not a bigger diff.
 - **Idempotent.** An existing pushed branch with green targeted tests = done → ADVANCE. Re-runs
-  continue an incomplete branch; they never restart it.
+  continue an incomplete branch; they never restart it. An item **rewound here by a human** is
+  reconciled per README: read their rewind comment, post a reconciliation note (what's already
+  implemented + evidence, what remains), and build only the gap — existing work is presumed good
+  unless the comment or your own check says otherwise.
 - **Targeted tests only.** Full suite, integration, and a real run belong to verify; build proves the
   unit-level wiring it changed. The PR is ship's job, not build's.
 - Honors the universal worker loop in [`README.md`](README.md).

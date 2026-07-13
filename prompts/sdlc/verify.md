@@ -75,6 +75,9 @@ One-line result: `VERIFY: <#issue> → ADVANCE(audit)|BOUNCE(build)|PARK — <re
 - **A real run is mandatory, not optional.** Green tests without walking the ACs in the running
   software is a half-done verify; behavior bugs hide where unit tests don't look.
 - **Idempotent.** A green report for the current branch HEAD = done. Any new commit invalidates it.
+  An item rewound here by a human with a still-valid green report → re-confirm cheaply and ADVANCE,
+  unless their rewind comment names a reason to distrust it — then re-verify that part. Evidence that
+  the work already shipped (merged PR) → PARK with the evidence for a human to close.
 - **Reuse build's `feat/<issue>` branch** for new tests; don't cut a new one. (Exception: the
   no-branch fallback — an item built outside the pipeline is verified on `<DEFAULT_BRANCH>`, and its
   new specs are handed to ship for a home.)
