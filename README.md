@@ -38,6 +38,11 @@ are baked in; only the project-specific parts are placeholders.
   never silently. A bounce sends the issue back to the lane that owns the failure; a park hands it to
   a human via `sdlc:needs-human`.
 
+The diagram above is the **shipped, collapsed form** of the canonical nine-stage spine
+(`intake → [design] → queued → build → verify → audit → ready → shipping → complete`,
+[docs/Composability.md](docs/Composability.md)): in a single-repo pipeline the human PR merge *is*
+the `ready` gate, and `shipping → complete` collapse into merge-and-close.
+
 The full narrative — why each rule exists, the failure modes it prevents — is in
 [docs/AgenticSDLC.md](docs/AgenticSDLC.md).
 
@@ -49,13 +54,16 @@ The full narrative — why each rule exists, the failure modes it prevents — i
 |---|---|
 | [`prompts/sdlc/README.md`](prompts/sdlc/README.md) | The **universal worker loop** — CLAIM → WORK → EMIT → STOP — binding on every lane. Read this first. |
 | [`prompts/sdlc/dispatch.md`](prompts/sdlc/dispatch.md) | The **dispatcher** prompt behind the scheduled task. Singleton gate, wip reaping, git/worktree maintenance, per-lane fan-out. |
-| [`prompts/sdlc/{intake,build,verify,audit,ship}.md`](prompts/sdlc/) | The five **stage workers**. Each defines only its own WORK and EMIT specifics. |
+| [`prompts/sdlc/{intake,build,verify,audit,ship}.md`](prompts/sdlc/) | The five core **stage workers**. Each defines only its own WORK and EMIT specifics. |
+| [`prompts/sdlc/design.md`](prompts/sdlc/design.md) | The **optional design-lane worker** — ships with the template but the default pipeline leaves the lane off; enable it for UI-facing work. |
+| [`tools/sdlc.mjs`](tools/sdlc.mjs) | The **reference CLI** (plain Node, zero deps) — deterministic claim/advance/gate/lock state math so agents supply judgment, not label typing. Optional but recommended. |
 | [`agents/sdlc-worker.md`](agents/sdlc-worker.md) | The **isolated worker agent** definition — deliberately has no delegation tool. Ships in Claude Code (`.claude/agents/`) and GitHub Copilot (`.github/agents/`) frontmatter variants. |
 | [`skills/documentation-tiers/SKILL.md`](skills/documentation-tiers/SKILL.md) | The **docs-tier discipline** the ship stage's docs fan-out routes to — hub-and-spoke L1/L2/L3 tiering, naming, sizing, thematic placement. Optional; copy into your harness's skill dir. |
 | [`docs/AgenticSDLC.md`](docs/AgenticSDLC.md) | The model, the invariants, and the two concurrency variants (serial vs. per-issue). |
 | [`docs/Adoption.md`](docs/Adoption.md) | Step-by-step: labels to create, placeholders to fill, the scheduled task to register. |
 | [`docs/labels.md`](docs/labels.md) | The `stage:*` / `sdlc:*` / `priority:*` label taxonomy, with a `gh` script to create them. |
 | [`docs/Composability.md`](docs/Composability.md) | **One spec, many forks** — the 9-stage canonical spine, the five variation points (tracker, topology, modules, dispatcher, quality bars), and the per-fork conformance profile. |
+| [`docs/profiles/work-ado.example.md`](docs/profiles/work-ado.example.md) | A **worked conformance profile** — a multi-repo Azure DevOps fork declared against the spec. |
 
 ---
 
@@ -67,10 +75,13 @@ The full narrative — why each rule exists, the failure modes it prevents — i
 3. **Fill the placeholders** — grep for `<` across `prompts/`; [docs/Adoption.md](docs/Adoption.md)
    lists every one and what it means (`<PROJECT>`, `<REPO_PATH>`, `<DEFAULT_BRANCH>`, `<TEST_CMD>`,
    `<INVARIANTS>`, …).
-4. **Dry-run manually** — paste `prompts/sdlc/README.md` + one stage file into an agent session and
+4. **Optional but recommended** — copy [`tools/sdlc.mjs`](tools/sdlc.mjs) for deterministic label
+   state math, and write a conformance profile (`prompts/sdlc/PROFILE.md`) from the skeleton in
+   [docs/Composability.md](docs/Composability.md#the-conformance-profile).
+5. **Dry-run manually** — paste `prompts/sdlc/README.md` + one stage file into an agent session and
    watch it process a single issue. The prompt doesn't know what fired it; manual and scheduled runs
    are identical.
-5. **Schedule the dispatcher** — register a recurring task whose body is a thin pointer to
+6. **Schedule the dispatcher** — register a recurring task whose body is a thin pointer to
    `prompts/sdlc/dispatch.md`. Enable it once your queue depth justifies the spend.
 
 ---
@@ -87,8 +98,9 @@ small; move to per-issue when throughput matters.
 
 UI/UX-heavy projects benefit from a `stage:design` lane between intake and queued (storyboard the
 change before building it). CLI/library/backend projects fold that into intake as a decision debate.
-[docs/AgenticSDLC.md](docs/AgenticSDLC.md#optional-design-lane) shows both; the shipped pipeline omits
-the lane — add it if your work is player-/user-facing.
+[docs/AgenticSDLC.md](docs/AgenticSDLC.md#optional-design-lane) shows both. The worker prompt ships
+([prompts/sdlc/design.md](prompts/sdlc/design.md)) but the default pipeline leaves the lane off —
+enable it (label + lane) if your work is player-/user-facing.
 
 ---
 
@@ -96,7 +108,9 @@ the lane — add it if your work is player-/user-facing.
 
 - A coding agent that can spawn **isolated subagents** with a restricted toolset (this template
   targets Claude Code; the prompts are harness-agnostic prose and port to others).
-- **GitHub issues** + the `gh` CLI, authenticated with `repo` scope.
+- **GitHub issues** + the `gh` CLI, authenticated with `repo` scope — the shipped tracker binding.
+  Other trackers (e.g. Azure DevOps) work via the binding contract in
+  [docs/Composability.md](docs/Composability.md#vp1--tracker-backend).
 - A scheduler for the dispatcher (Claude Code scheduled tasks, cron + headless agent, CI cron, etc.).
 
 ## License
