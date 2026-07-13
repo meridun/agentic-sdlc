@@ -30,9 +30,18 @@ merge-and-close. Multi-repo forks make the tail explicit; both forms conform.
    processes two issues in a run. This bounds blast radius and makes every run auditable from the issue
    thread alone.
 
-2. **Idempotency.** Schedulers fire on a clock, not on need. Every stage checks "is my artifact already
-   present for this branch HEAD?" and no-ops if so. A re-run must never redo completed work or restart
-   an in-progress branch — it *continues* it.
+2. **Idempotency — reconcile against reality, never re-execute blindly.** Schedulers fire on a clock,
+   not on need. Every stage checks "is my artifact already present for this branch HEAD?" and no-ops if
+   so. A re-run must never redo completed work or restart an in-progress branch — it *continues* it.
+   The same rule covers **human rewinds**: an item moved back to an earlier stage, or a closed issue
+   reopened into `stage:intake`, is reconciled, not re-run from scratch. The stage investigates what
+   already exists, trusting artifacts over assertions — merged code / branch state / PR status first,
+   then recorded reports for the current HEAD, then issue comments, labels last. Existing valid
+   artifacts are presumed good unless the human's rewind comment gives a reason to distrust them or
+   the investigation itself finds something significant; then redo exactly the invalidated part, and
+   only it. If the evidence shows the work is already fully shipped, any stage may short-circuit:
+   PARK with the evidence (PR#, commit, observed behavior) for a human to close — no silent
+   auto-close, and no pointless ratchet through the remaining lanes.
 
 3. **Isolation — no delegation, no shared tree.** Workers have no agent-spawning tool (a spawned
    subagent runs detached and strands the item). They never work in the main checkout — each uses an

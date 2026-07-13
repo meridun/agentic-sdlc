@@ -80,6 +80,8 @@ One-line result: `INTAKE: <#issue> → ADVANCE(queued)|PARK|CLOSE — <reason>`
 - **`gh` is in scope here** — intake's duplicate search legitimately uses it inline even though the
   research approach is otherwise read-only.
 - **Idempotent:** a prior intake summary comment → re-confirm the verdict cheaply, don't re-research. A
-  PARKed item with an in-thread answer should ADVANCE next pass.
+  PARKed item with an in-thread answer should ADVANCE next pass. A **reopened** issue is reconciled, not
+  re-triaged from scratch: if the evidence (merged PR, code on `<DEFAULT_BRANCH>`) shows it already
+  shipped, PARK with that evidence for a human to close rather than advancing it back into the pipeline.
 - **No code changes, no branches** (except the throwaway docs-only worktree for graduating a decision).
 - Honors the universal worker loop in [`README.md`](README.md).

@@ -19,6 +19,8 @@ Per the README universal loop — lane `stage:ship`, idle reply `SHIP: idle`.
 
 ### 2. WORK
 Idempotency first: a PR for this branch already open with the docs fan-out done → skip to **ADVANCE**.
+A PR for this branch already **merged** with the issue still open → PARK with the merge evidence for a
+human to close (intake's merge sweep normally handles these).
 Otherwise, in the issue's worktree (`<WORKTREE_ROOT>/<issue#>`) on build's branch
 (`<type>/<issue#>-<slug>`):
 

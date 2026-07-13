@@ -70,5 +70,8 @@ One-line result: `AUDIT: <#issue> → ADVANCE(ship)|BOUNCE(build)|PARK — <reas
 - **Review the diff, not the world.** Scope to what the branch changed vs `<DEFAULT_BRANCH>`; full-repo
   audits are a separate, human-initiated activity.
 - **Idempotent.** A clean report for the current branch HEAD = done; any new commit invalidates it.
+  An item rewound here by a human with a still-valid clean report → re-confirm cheaply and ADVANCE,
+  unless their rewind comment names a reason to distrust it — then re-audit that part. Evidence that
+  the work already shipped (merged PR) → PARK with the evidence for a human to close.
 - Audit **commits nothing and cuts no branch** — it reads build's branch and relabels.
 - Honors the universal worker loop in [`README.md`](README.md).

@@ -38,4 +38,8 @@ One-line result: `DESIGN: <#issue> → ADVANCE|PARK|BOUNCE — <reason>`
 ## Notes
 - **Design-fidelity bar.** "Settled" means build can implement without making a product decision;
   open questions are a PARK, not a hand-wave.
+- **Idempotent.** An existing settled design (in-thread or in `<DECISION_RECORD>`) is presumed good —
+  re-confirm it still matches the current issue body and codebase, don't redesign. An item rewound
+  here by a human: read their rewind comment; only the part it (or your own check) invalidates gets
+  reworked.
 - Honors the universal worker loop in [`README.md`](README.md).
