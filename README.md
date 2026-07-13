@@ -113,6 +113,12 @@ enable it (label + lane) if your work is player-/user-facing.
   [docs/Composability.md](docs/Composability.md#vp1--tracker-backend).
 - A scheduler for the dispatcher (Claude Code scheduled tasks, cron + headless agent, CI cron, etc.).
 
+## Contributing to this repo
+
+This repo follows its own template: **`feature → dev → master`**. Cut branches from `dev`, target
+PRs at `dev`, and let `master` move only by a human-initiated `dev → master` promotion PR (merged
+back into `dev` afterwards). See [CLAUDE.md](CLAUDE.md).
+
 ## License
 
 [MIT](LICENSE).
