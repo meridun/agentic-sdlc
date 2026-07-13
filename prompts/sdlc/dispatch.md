@@ -104,7 +104,8 @@ never discard or overwrite uncommitted files — in the main tree or any worktre
 
 ### Per-lane dispatch
 
-For each lane (intake, build, verify, audit, ship):
+For each lane (intake, build, verify, audit, ship — plus design, if this project runs the optional
+design lane):
 
 1. Eligible = open, `stage:<lane>`, not `sdlc:wip` / `sdlc:needs-human` / `sdlc:hold`. Decide from
    the Step 0 snapshot; re-query the lane fresh ONLY if an earlier worker this cycle ADVANCEd an item

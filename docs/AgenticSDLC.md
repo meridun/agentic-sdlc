@@ -64,7 +64,7 @@ merge-and-close. Multi-repo forks make the tail explicit; both forms conform.
 - `priority:critical` › `priority:medium` › `priority:future` — CLAIM order within a lane, then FIFO by
   creation date.
 
-Full `gh`-scriptable list: [labels.md](labels.md).
+Full `gh`-scriptable list: [Labels.md](Labels.md).
 
 ## Concurrency variants
 
@@ -95,8 +95,9 @@ UI/UX-heavy work benefits from a `stage:design` lane between intake and queued: 
 design-owed item to `stage:design`, a design worker storyboards/specs the change, and only then does it
 reach `stage:queued`. CLI / library / backend projects skip the lane and fold design questions into
 intake as **decision debates** — intake PARKs with the options framed in-issue, the human decides, and
-intake records a `<DECISION_RECORD>` one-liner before routing onward. The shipped pipeline omits the
-lane; add it if your work is user-facing and worth storyboarding.
+intake records a `<DECISION_RECORD>` one-liner before routing onward. The worker prompt ships
+(`prompts/sdlc/design.md`) but the default pipeline leaves the lane off; enable it (create the
+`stage:design` label and dispatch the lane) if your work is user-facing and worth storyboarding.
 
 ## Why the issue thread is the only state
 
