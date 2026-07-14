@@ -2,8 +2,9 @@
 
 A portable, project-agnostic **agentic SDLC pipeline**: a set of prompts and agent definitions
 that let a coding agent (Claude Code, or any harness with subagents + a GitHub issue tracker) run
-your backlog through a staged software-delivery pipeline — intake → queued → build → verify → audit
-→ ship (`queued` is a workerless human throttle) — one issue per stage, unattended, on a schedule.
+your backlog through a staged software-delivery pipeline — intake → [design] → queued → build →
+verify → audit → ship (`design` is an optional lane; `queued` is a workerless human throttle) —
+one issue per stage, unattended, on a schedule.
 
 It is a **template**, not a framework. There is no runtime to install. You copy the `prompts/` and
 `agents/` trees into a repo, fill in the `<PLACEHOLDERS>`, register one scheduled task, and the
@@ -33,15 +34,17 @@ a different model:
   `ready` gate, and `shipping → complete` fold into merge-and-close. Multi-repo forks make the tail
   explicit; both forms conform.
 
-So the **template you actually copy** ships six lanes — five workers plus the workerless throttle:
+So the **template you actually copy** ships six worker prompts — `intake`, the optional `design`,
+`build`, `verify`, `audit`, `ship` — plus the workerless `queued` throttle. Only the tail collapses;
+the default pipeline runs with `design` off (dashed below), switched on for UI-facing work:
 
 ```
-  ┌─────────┐   ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐
-  │ intake  │──▶│ queued │──▶│ build  │──▶│ verify │──▶│ audit  │──▶│  ship  │──▶ (PR merged)
-  └─────────┘   └────────┘   └────────┘   └────────┘   └────────┘   └────────┘
-   triage,      human         cut branch,   full suite   security /   docs fan-out,
-   dedup,       throttle      implement,    + real run   invariant    open PR
-   route        (workerless)  targeted test              review
+  ┌─────────┐  ┌ ─ ─ ─ ─ ┐  ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐
+  │ intake  │─▶  [design]  ─▶│ queued │──▶│ build  │──▶│ verify │──▶│ audit  │──▶│  ship  │──▶ (PR merged)
+  └─────────┘  └ ─ ─ ─ ─ ┘  └────────┘   └────────┘   └────────┘   └────────┘   └────────┘
+   triage,      optional      human        cut branch,   full suite   security /   docs fan-out,
+   dedup,       storyboard    throttle     implement,    + real run   invariant    open PR
+   route        (UI work)     (workerless) targeted test              review
 ```
 
 - **Each stage is one prompt** in [`prompts/sdlc/`](prompts/sdlc/). A worker runs exactly one pass
