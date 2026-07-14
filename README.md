@@ -2,8 +2,8 @@
 
 A portable, project-agnostic **agentic SDLC pipeline**: a set of prompts and agent definitions
 that let a coding agent (Claude Code, or any harness with subagents + a GitHub issue tracker) run
-your backlog through a staged software-delivery pipeline — intake → build → verify → audit → ship —
-one issue per stage, unattended, on a schedule.
+your backlog through a staged software-delivery pipeline — intake → queued → build → verify → audit
+→ ship (`queued` is a workerless human throttle) — one issue per stage, unattended, on a schedule.
 
 It is a **template**, not a framework. There is no runtime to install. You copy the `prompts/` and
 `agents/` trees into a repo, fill in the `<PLACEHOLDERS>`, register one scheduled task, and the
@@ -16,6 +16,24 @@ are baked in; only the project-specific parts are placeholders.
 ---
 
 ## The model in one screen
+
+```
+ intake → [design] → queued → build → verify → audit → ready → shipping → complete
+           optional   HUMAN                            HUMAN    └──── collapses to ────┘
+           module     GATE 1                           GATE 2      the human PR merge
+```
+
+That is the **canonical nine-stage spine** ([docs/Composability.md](docs/Composability.md)). Read it
+first so the shipped pipeline never surprises you — everything below is a *simplification* of it, not
+a different model:
+
+- **`[design]` is optional.** It ships with the template but the default pipeline leaves the lane
+  off; enable it for UI-facing work.
+- **`ready → shipping → complete` collapse.** In a single-repo pipeline the human PR merge *is* the
+  `ready` gate, and `shipping → complete` fold into merge-and-close. Multi-repo forks make the tail
+  explicit; both forms conform.
+
+So the **template you actually copy** ships six lanes — five workers plus the workerless throttle:
 
 ```
   ┌─────────┐   ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐
@@ -37,11 +55,6 @@ are baked in; only the project-specific parts are placeholders.
 - **Every worker emits exactly one outcome** — `ADVANCE`, `BOUNCE`, `PARK`, or `CONTINUE` — and
   never silently. A bounce sends the issue back to the lane that owns the failure; a park hands it to
   a human via `sdlc:needs-human`.
-
-The diagram above is the **shipped, collapsed form** of the canonical nine-stage spine
-(`intake → [design] → queued → build → verify → audit → ready → shipping → complete`,
-[docs/Composability.md](docs/Composability.md)): in a single-repo pipeline the human PR merge *is*
-the `ready` gate, and `shipping → complete` collapse into merge-and-close.
 
 The full narrative — why each rule exists, the failure modes it prevents — is in
 [docs/AgenticSDLC.md](docs/AgenticSDLC.md).
