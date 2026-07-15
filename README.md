@@ -69,7 +69,7 @@ The full narrative — why each rule exists, the failure modes it prevents — i
 | Path | What it is |
 |---|---|
 | [`prompts/sdlc/README.md`](prompts/sdlc/README.md) | The **universal worker loop** — CLAIM → WORK → EMIT → STOP — binding on every lane. Read this first. |
-| [`prompts/sdlc/dispatch.md`](prompts/sdlc/dispatch.md) | The **dispatcher** prompt behind the scheduled task. Singleton gate, wip reaping, git/worktree maintenance, per-lane fan-out. |
+| [`prompts/sdlc/dispatch.md`](prompts/sdlc/dispatch.md) | The **dispatcher** prompt behind the scheduled task. Concurrent-safe (no singleton): wip reaping (verify-before-write), machine-locked git/worktree maintenance, per-lane fan-out. |
 | [`prompts/sdlc/{intake,build,verify,audit,ship}.md`](prompts/sdlc/) | The five core **stage workers**. Each defines only its own WORK and EMIT specifics. |
 | [`prompts/sdlc/design.md`](prompts/sdlc/design.md) | The **optional design-lane worker** — ships with the template but the default pipeline leaves the lane off; enable it for UI-facing work. |
 | [`tools/sdlc.mjs`](tools/sdlc.mjs) | The **reference CLI** (plain Node, zero deps) — deterministic claim/advance/gate/lock state math so agents supply judgment, not label typing. Optional but recommended. |

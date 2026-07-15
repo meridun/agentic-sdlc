@@ -25,8 +25,8 @@ The pipeline is driven entirely by GitHub labels. Create these once per repo.
 ## Zero stage labels is not (usually) corrupt
 
 An open issue with **zero** `stage:*` labels is a **legitimate** state: post-ship awaiting PR merge
-(ship's ADVANCE removes the stage; the merge closes the issue), the `sdlc:dispatch-lock` issue, or
-an issue simply not (yet) triaged into the pipeline. It is corrupt only when `sdlc:wip` or
+(ship's ADVANCE removes the stage; the merge closes the issue), or an issue simply not (yet)
+triaged into the pipeline. It is corrupt only when `sdlc:wip` or
 `sdlc:needs-human` remains on it — a machine flag with no lane means a worker died mid-transition.
 **Multiple** `stage:*` labels are always corrupt (the item is eligible in two lanes at once).
 
@@ -61,13 +61,7 @@ gh label create "blocked" --color d876e3 --description "Not yet buildable (bounc
 gh label create "ready"   --color 0e8a16 --description "Blocker cleared" --force
 ```
 
-## Per-issue variant only: the dispatcher mutex
-
-The concurrent variant needs a singleton-lock issue. Create it once and pin it:
-
-```bash
-n=$(gh issue create --title "sdlc:dispatch-lock" \
-  --body "Dispatcher mutex. The dispatcher posts lock/unlock comments here; no worker touches it." \
-  --label "sdlc:hold" --json number --jq .number)
-gh issue pin "$n"
-```
+No dispatcher-lock issue exists in this model: there is no dispatcher singleton. Overlapping
+dispatch runs deconflict via per-issue claims, idempotent GitHub writes, and a per-machine
+filesystem lock (`.git/sdlc-maint.lock`) the dispatcher manages itself — nothing to create on the
+tracker. See `prompts/sdlc/dispatch.md` Step -1.
