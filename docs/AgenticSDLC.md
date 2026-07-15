@@ -50,7 +50,9 @@ merge-and-close. Multi-repo forks make the tail explicit; both forms conform.
 
 4. **Stale-lock reaping, never live-lock stomping.** `sdlc:wip` is the lock. The dispatcher reaps a
    lock only when its claim comment is ≥2h old (two full hourly cycles — no legitimate pass runs that
-   long). A fresh lock is a live worker and is left alone. Human-set labels (`sdlc:needs-human`,
+   long), and **verify-before-write**: it re-fetches the newest claim immediately before stripping,
+   because its snapshot may be stale under concurrent dispatch runs. A fresh lock is a live worker
+   and is left alone; an unprovable age is left alone too. Human-set labels (`sdlc:needs-human`,
    `sdlc:hold`) are never touched by any automation.
 
 5. **Bounce to the lane that owns the failure; park for the human.** A red test bounces to build; a
@@ -69,7 +71,7 @@ merge-and-close. Multi-repo forks make the tail explicit; both forms conform.
   it. Paired with an `sdlc:claim <run-id> <lane>` comment that records ownership + timestamp.
 - `sdlc:needs-human` — parked. A worker hit something only a human can decide. Automation never
   advances or reaps a parked item; it re-enters its lane when the human clears the label.
-- `sdlc:hold` — human keep-off. No worker touches it. (Also used to mark the dispatcher-lock issue.)
+- `sdlc:hold` — human keep-off. No worker touches it.
 - `priority:critical` › `priority:medium` › `priority:future` — CLAIM order within a lane, then FIFO by
   creation date.
 
@@ -80,15 +82,19 @@ Full `gh`-scriptable list: [Labels.md](Labels.md).
 The template ships the **per-issue** model. A simpler **serial** model exists — pick by backlog size.
 
 ### Per-issue (shipped default)
-- Locking is per-issue via claim comments with run-ids + a claim-verify race check.
-- The dispatcher holds a **singleton mutex** (the pinned `sdlc:dispatch-lock` issue) so two dispatchers
-  never do maintenance at once, but lane workers themselves **run concurrently** — each in its own
-  worktree.
+- Locking is per-issue via claim comments with run-ids + a claim-verify race check; lane workers
+  **run concurrently** — each in its own worktree.
+- There is **no dispatcher singleton**: any number of dispatch runs — different machines, or
+  overlapping scheduled/manual runs on one machine — may execute concurrently. They deconflict via
+  three rules: per-issue optimistic claims (the tracker is the shared store), idempotent
+  verify-before-write GitHub writes (losing a race is recorded, never an error), and a **per-machine
+  filesystem lock** (`.git/sdlc-maint.lock`, 30-min stale reap) that serializes only local
+  git/worktree/artifact maintenance and never aborts a cycle.
 - A fresh lock only removes *that one issue* from eligibility; it never aborts the cycle.
 - Best when throughput matters and multiple issues are in flight across lanes.
 
 ### Serial (simpler alternative)
-- No dispatcher mutex, no claim comments, no worktrees required.
+- No machine lock, no claim comments, no worktrees required.
 - The wip gate is **global**: if *any* issue carries an `sdlc:wip` younger than 2h, the whole run
   **aborts** (a live worker exists somewhere). Older → reap and proceed.
 - Lanes run **one at a time**, in pipeline order; workers operate in the main checkout with strict

@@ -23,12 +23,14 @@ pipeline folds design questions into intake as decision debates.
 ## How to run
 
 - **Scheduled (primary):** the `sdlc-dispatch` scheduled task runs the dispatcher prompt
-  ([`dispatch.md`](dispatch.md)) on a cadence (hourly is typical): a dispatcher singleton gate, a
-  per-issue wip gate (stale-lock reaping), git + worktree maintenance, then one `<WORKER_AGENT>`
-  subagent per non-empty lane. Each worker reads this README plus its lane file and executes one
-  pass; workers share no context — the issue thread is the only carried state. The dispatcher's own
-  prompt is [`dispatch.md`](dispatch.md) — the canonical copy; the scheduled task is a thin pointer
-  to it.
+  ([`dispatch.md`](dispatch.md)) on a cadence (hourly is typical): a per-issue wip gate (stale-lock
+  reaping, verify-before-write), machine-locked git + worktree maintenance, then one
+  `<WORKER_AGENT>` subagent per non-empty lane. Each worker reads this README plus its lane file
+  and executes one pass; workers share no context — the issue thread is the only carried state.
+  There is no dispatcher singleton: overlapping dispatch runs — same machine or different machines
+  — deconflict via per-issue claims, a per-machine maintenance lock, and idempotent GitHub writes.
+  The dispatcher's own prompt is [`dispatch.md`](dispatch.md) — the canonical copy; the scheduled
+  task is a thin pointer to it.
 - **Manual:** paste this README plus a worker file's body into an agent session. Identical behavior
   — the prompt doesn't know what fired it. Mint your own run-id for the claim comment. Manual and
   scheduled runs coexist safely: claims deconflict per-issue.
@@ -47,10 +49,12 @@ pipeline folds design questions into intake as decision debates.
       is newer than the last outcome EMIT and predates yours (or ties with a lexicographically lower
       run-id), you lost the race — leave the label and the winner's claim untouched, delete nothing,
       and go pick the next eligible item. Only the losing worker's own claim comment may be edited to
-      note `superseded`.
+      note `superseded`. "Newer than the last outcome EMIT" has a machine-visible boundary: the
+      issue's most recent `sdlc:wip` *unlabeled* timeline event — every outcome EMIT removes
+      `sdlc:wip`, and a reaper strip also (correctly) invalidates earlier claims.
 
-   The lock is machine-owned and volatile; the dispatcher's reaper may strip it, and it checks the
-   claim comment's run-id + timestamp before doing so.
+   The lock is machine-owned and volatile; the dispatcher's reaper may strip it, and it re-checks
+   the claim comment's run-id + timestamp immediately before doing so.
 
    If your repo carries the reference CLI (`tools/sdlc.mjs`, see `docs/Adoption.md`), steps 1–3
    collapse into one deterministic command: `node tools/sdlc.mjs claim <issue> <run-id> <lane>
@@ -97,7 +101,23 @@ pipeline folds design questions into intake as decision debates.
 3. **EMIT exactly one outcome** — ADVANCE, BOUNCE, or PARK (build also defines CONTINUE) — never
    silent. **Every outcome removes `sdlc:wip`** on the way out. Leave the worktree in place
    (dispatcher maintenance prunes worktrees for merged/dead branches).
-4. **STOP** — reply the lane's one-line result. One item per pass; never pick up a second.
+4. **STOP** — reply the lane's one-line result, then end the reply with a fenced **JSON result
+   block** — the machine-parseable contract the dispatcher consumes (prose stays for humans):
+
+   ```json
+   {"issue": 60, "outcome": "ADVANCE", "next_stage": "verify", "notes": "one-line summary"}
+   ```
+
+   - `outcome`: `ADVANCE` | `BOUNCE` | `PARK` | `CONTINUE` | `IDLE`.
+   - `next_stage`: the stage label the item sits in after the outcome (e.g. `"verify"` after a
+     build ADVANCE, `"build"` after a build CONTINUE or a bounce to build, unchanged lane for
+     PARK); `null` for IDLE.
+   - Idle pass: `{"issue": null, "outcome": "IDLE", "next_stage": null, "notes": ""}`.
+   - The block is always the **last** element of the reply, exactly one per reply. A lane a project
+     configures to process multiple items in one pass returns an **array** of result objects, one
+     per item.
+
+   One item per pass; never pick up a second.
 
 ## Project invariants (bind in every lane)
 

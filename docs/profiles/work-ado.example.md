@@ -39,11 +39,12 @@ Bindings per [Composability.md](../Composability.md).
     needs-code; needs-code creates or attaches to a Feature. Priority 1 does **not** bypass
     automation.
 
-- **VP4 dispatcher:** interactive GitHub Copilot session; scheduler mechanism TBD. Singleton lock
-  acquired per session; reaps stale work locks (2h heuristic), does Git/PR maintenance,
-  coordinates Features, fans out repository workers, performs a PSI pass, posts a digest,
-  releases the lock. Workers follow the narrow CLAIM → WORK → EMIT → STOP contract; `continue`
-  releases the lock without a terminal phase result.
+- **VP4 dispatcher:** interactive GitHub Copilot session; scheduler mechanism TBD. No dispatcher
+  singleton — overlapping sessions deconflict via per-issue work locks and idempotent tracker
+  writes; machine-local Git/PR maintenance is serialized by a workspace lock file (30-min stale
+  reap). Reaps stale work locks (2h heuristic, verify-before-write), coordinates Features, fans
+  out repository workers, performs a PSI pass, posts a digest. Workers follow the narrow CLAIM →
+  WORK → EMIT → STOP contract; `continue` releases the work lock without a terminal phase result.
 
 - **VP5 quality bars:** per repo (`core-api`, `webapp`, `utility`); each child verifies to its own
   repo's full-verification + smoke bar. *(Declare the concrete commands in the real profile.)*
