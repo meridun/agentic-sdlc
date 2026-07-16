@@ -59,9 +59,10 @@ export const STAGES = ['intake', 'design', 'queued', 'build', 'verify', 'audit',
 
 /**
  * Legal stage transitions: the forward pipeline edge(s) plus the documented
- * bounces from prompts/sdlc/. `ship` is terminal (the ship worker opens a PR;
- * the merge closes the issue). Any edge not listed here is rejected — that is
- * what fixes the label-typo class of bug.
+ * bounces from prompts/sdlc/. `ship` is terminal on ADVANCE (the ship worker
+ * opens a PR; the merge closes the issue) but may still bounce a late code
+ * problem or merge conflict back to build. Any edge not listed here is
+ * rejected — that is what fixes the label-typo class of bug.
  */
 export const STAGE_GRAPH = {
   intake: ['design', 'queued'],
@@ -70,7 +71,7 @@ export const STAGE_GRAPH = {
   build: ['verify', 'queued', 'design', 'intake'],
   verify: ['audit', 'build'],
   audit: ['ship', 'build'],
-  ship: [],
+  ship: ['build'],
 };
 
 /** A user-facing error whose message is printed without a stack trace. */

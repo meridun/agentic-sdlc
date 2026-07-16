@@ -15,7 +15,7 @@ The pipeline is driven entirely by GitHub labels. Create these once per repo.
 | `stage:design` | `#c5def5` | *(optional)* Awaiting design/storyboard. Omit if folding design into intake. |
 | `sdlc:wip` | `#d93f0b` | Per-issue lock. Machine-owned, volatile. Paired with an `sdlc:claim` comment. |
 | `sdlc:needs-human` | `#e99695` | Parked — a worker needs a human decision. Automation never advances it. |
-| `sdlc:hold` | `#000000` | Human keep-off. No worker touches it. Also marks the dispatcher-lock issue. |
+| `sdlc:hold` | `#000000` | Human keep-off. No worker touches it. |
 | `priority:critical` | `#b60205` | Claimed first within a lane. |
 | `priority:medium` | `#fbca04` | Default priority. |
 | `priority:future` | `#c2e0c6` | Claimed last. |
