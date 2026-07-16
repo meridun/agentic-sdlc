@@ -2,7 +2,8 @@
 
 A portable, project-agnostic **agentic SDLC pipeline**: a set of prompts and agent definitions
 that let a coding agent (Claude Code, or any harness with subagents + a GitHub issue tracker) run
-your backlog through a staged software-delivery pipeline — intake → build → verify → audit → ship —
+your backlog through a staged software-delivery pipeline — intake → [design] → queued → build →
+verify → audit → ship (`design` is an optional lane; `queued` is a workerless human throttle) —
 one issue per stage, unattended, on a schedule.
 
 It is a **template**, not a framework. There is no runtime to install. You copy the `prompts/` and
@@ -18,12 +19,32 @@ are baked in; only the project-specific parts are placeholders.
 ## The model in one screen
 
 ```
-  ┌─────────┐   ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐
-  │ intake  │──▶│ queued │──▶│ build  │──▶│ verify │──▶│ audit  │──▶│  ship  │──▶ (PR merged)
-  └─────────┘   └────────┘   └────────┘   └────────┘   └────────┘   └────────┘
-   triage,      human         cut branch,   full suite   security /   docs fan-out,
-   dedup,       throttle      implement,    + real run   invariant    open PR
-   route        (workerless)  targeted test              review
+ intake → [design] → queued → build → verify → audit → ready → shipping → complete
+           optional   HUMAN                            HUMAN    └──── collapses to ────┘
+           module     GATE 1                           GATE 2      the human PR merge
+```
+
+That is the **canonical nine-stage spine** ([docs/Composability.md](docs/Composability.md)). Read it
+first so the shipped pipeline never surprises you — everything below is a *simplification* of it, not
+a different model:
+
+- **`[design]` is optional.** It ships with the template but the default pipeline leaves the lane
+  off; enable it for UI-facing work.
+- **`ready → shipping → complete` collapse.** In a single-repo pipeline the human PR merge *is* the
+  `ready` gate, and `shipping → complete` fold into merge-and-close. Multi-repo forks make the tail
+  explicit; both forms conform.
+
+So the **template you actually copy** ships six worker prompts — `intake`, the optional `design`,
+`build`, `verify`, `audit`, `ship` — plus the workerless `queued` throttle. Only the tail collapses;
+the default pipeline runs with `design` off (dashed below), switched on for UI-facing work:
+
+```
+  ┌─────────┐  ┌ ─ ─ ─ ─ ┐  ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐
+  │ intake  │─▶  [design]  ─▶│ queued │──▶│ build  │──▶│ verify │──▶│ audit  │──▶│  ship  │──▶ (PR merged)
+  └─────────┘  └ ─ ─ ─ ─ ┘  └────────┘   └────────┘   └────────┘   └────────┘   └────────┘
+   triage,      optional      human        cut branch,   full suite   security /   docs fan-out,
+   dedup,       storyboard    throttle     implement,    + real run   invariant    open PR
+   route        (UI work)     (workerless) targeted test              review
 ```
 
 - **Each stage is one prompt** in [`prompts/sdlc/`](prompts/sdlc/). A worker runs exactly one pass
@@ -38,11 +59,6 @@ are baked in; only the project-specific parts are placeholders.
   never silently. A bounce sends the issue back to the lane that owns the failure; a park hands it to
   a human via `sdlc:needs-human`.
 
-The diagram above is the **shipped, collapsed form** of the canonical nine-stage spine
-(`intake → [design] → queued → build → verify → audit → ready → shipping → complete`,
-[docs/Composability.md](docs/Composability.md)): in a single-repo pipeline the human PR merge *is*
-the `ready` gate, and `shipping → complete` collapse into merge-and-close.
-
 The full narrative — why each rule exists, the failure modes it prevents — is in
 [docs/AgenticSDLC.md](docs/AgenticSDLC.md).
 
@@ -53,7 +69,7 @@ The full narrative — why each rule exists, the failure modes it prevents — i
 | Path | What it is |
 |---|---|
 | [`prompts/sdlc/README.md`](prompts/sdlc/README.md) | The **universal worker loop** — CLAIM → WORK → EMIT → STOP — binding on every lane. Read this first. |
-| [`prompts/sdlc/dispatch.md`](prompts/sdlc/dispatch.md) | The **dispatcher** prompt behind the scheduled task. Singleton gate, wip reaping, git/worktree maintenance, per-lane fan-out. |
+| [`prompts/sdlc/dispatch.md`](prompts/sdlc/dispatch.md) | The **dispatcher** prompt behind the scheduled task. Concurrent-safe (no singleton): wip reaping (verify-before-write), machine-locked git/worktree maintenance, per-lane fan-out. |
 | [`prompts/sdlc/{intake,build,verify,audit,ship}.md`](prompts/sdlc/) | The five core **stage workers**. Each defines only its own WORK and EMIT specifics. |
 | [`prompts/sdlc/design.md`](prompts/sdlc/design.md) | The **optional design-lane worker** — ships with the template but the default pipeline leaves the lane off; enable it for UI-facing work. |
 | [`tools/sdlc.mjs`](tools/sdlc.mjs) | The **reference CLI** (plain Node, zero deps) — deterministic claim/advance/gate/lock state math so agents supply judgment, not label typing. Optional but recommended. |
@@ -112,6 +128,12 @@ enable it (label + lane) if your work is player-/user-facing.
   Other trackers (e.g. Azure DevOps) work via the binding contract in
   [docs/Composability.md](docs/Composability.md#vp1--tracker-backend).
 - A scheduler for the dispatcher (Claude Code scheduled tasks, cron + headless agent, CI cron, etc.).
+
+## Contributing to this repo
+
+This repo follows its own template: **`feature → dev → master`**. Cut branches from `dev`, target
+PRs at `dev`, and let `master` move only by a human-initiated `dev → master` promotion PR (merged
+back into `dev` afterwards). See [CLAUDE.md](CLAUDE.md).
 
 ## License
 

@@ -83,15 +83,34 @@ The spec's state machine needs, from any tracker, exactly these operations:
 |---|---|---|
 | stage marker (exactly one) | `stage:*` label | phase tag / state field |
 | routing marker | repo labels / single repo | exactly one `repo:*` tag per child |
-| claim lock + timestamp | `sdlc:wip` + claim comment | `sdlc:wip` / `sdlc:wip-<run-id>` tags |
+| claim lock + timestamp | `sdlc:wip` + claim comment | lock field (rev-CAS, preferred) or `sdlc:wip` tag + claim comment |
 | park to human | `sdlc:needs-human` | `sdlc:needs-human` **on the Feature**, HUMAN ACTION REQUIRED discussion comment |
 | human keep-off | `sdlc:hold` | `sdlc:hold` |
 | evidence record | issue comment | child PBI evidence fields / comments |
 | hierarchy & ordering | n/a (flat issues) | ADO Parent link (membership), predecessor/successor links (provider→consumer order) |
 | tag mutation safety | `gh` label ops | **all tag ops via `sdlc.ps1`** — raw ADO CLI replaces rather than appends |
+| status dashboard *(optional cache)* | — (labels + thread suffice) | description status block, dispatcher-rewritten from evidence |
 
 Rule: a fork documents its binding table once, then every prompt in that fork speaks the local
 dialect. The abstract operation names are the shared vocabulary for cross-fork comparison.
+
+**Lock-substrate contract.** Whatever carries the claim lock must provide all three of:
+
+1. **Deterministic contention resolution** — either an *append-only, server-timestamped* record
+   (GitHub claim comments; requires the claim-verify + boundary ritual of
+   `prompts/sdlc/README.md`), or a *compare-and-swap* write (e.g. an ADO field PATCH tested
+   against `System.Rev`), which serializes claims at the tracker and collapses the claim-verify
+   ritual entirely.
+2. **Provable age and owner from server-side data** — a comment timestamp, a field revision, or a
+   timeline event. A worker-authored string alone proves nothing, and a whole-item modified stamp
+   (`updatedAt` / `ChangedDate`) is refreshed by any edit. A lock whose age cannot be proven is
+   never reaped — leave it and record it.
+3. **A cheap "all locked items" query** for the dispatcher's Step 0 snapshot (a label filter, a
+   WIQL field/tag clause — not a full-text scan of a rich-text field).
+
+A fork may additionally cache a **derived status block** on the work item (see the ADO profile
+for the worked format). A cache is never authoritative: it is regenerated from the evidence
+record on any parse failure, never trusted or repaired by guesswork, and locks never live in it.
 
 ### VP2 — Topology: single-repo item vs multi-repo Feature
 
@@ -129,19 +148,20 @@ The multi-repo model is the general case; single-repo is its degenerate form.
 
 ### VP4 — Dispatcher runtime
 
-The dispatcher contract is runtime-agnostic: singleton lock, stale-lock reaping (2h heuristic),
-git/PR maintenance, per-lane fan-out of isolated workers, end-of-cycle digest, lock release.
-Bindings in the wild:
+The dispatcher contract is runtime-agnostic: a concurrency model of per-issue claims + idempotent
+verify-before-write tracker writes + a per-machine maintenance lock (no dispatcher singleton),
+stale-lock reaping (2h heuristic, verify-before-write), git/PR maintenance, per-lane fan-out of
+isolated workers, end-of-cycle digest. Bindings in the wild:
 
 - **Claude Code** — scheduled task → `dispatch.md` → one worker subagent per non-empty lane
   (IsekaiOnline, vtk, pemr).
 - **GitHub Copilot** — interactive session runs the dispatcher prompt; scheduler mechanism TBD
-  (work). Same contract; the fork documents how the singleton lock is held.
+  (work). Same contract; the fork documents how machine-local maintenance is serialized.
 - **cron / CI** — headless agent invocation with the thin-pointer prompt.
 
-A fork must state its binding for: how the cycle is triggered, how the singleton lock is
-represented, and how workers are isolated (worktrees, separate clones, or serial-variant
-tree hygiene).
+A fork must state its binding for: how the cycle is triggered, how machine-local maintenance is
+serialized (the per-machine lock's representation), and how workers are isolated (worktrees,
+separate clones, or serial-variant tree hygiene).
 
 ### VP5 — Quality bars
 
@@ -163,7 +183,7 @@ to both repos can diff a profile against this spec mechanically.
 - VP1 tracker: <GitHub labels | ADO tags+links> — binding table or link
 - VP2 topology: <single-repo | multi-repo Feature/child> — routing tags if multi
 - VP3 modules: design lane <on/off + trigger>, PSI lane <on/off>, others
-- VP4 dispatcher: <trigger, singleton-lock representation, worker isolation>
+- VP4 dispatcher: <trigger, maintenance-lock representation, worker isolation>
 - VP5 quality bars: per repo — test / full-suite / smoke / lint / invariants / docs sinks
 - Deterministic core: <none | tools/sdlc.mjs | sdlc.ps1 | sdlc CLI> and which rituals it owns
 - Known deviations from spec: <list, with why>

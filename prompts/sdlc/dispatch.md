@@ -1,10 +1,13 @@
 # Dispatcher
 
-**Not a lane worker.** The prompt behind the `sdlc-dispatch` scheduled task: dispatcher singleton
-gate, per-issue wip gate (reap stale locks only), git + worktree maintenance, then one
-`<WORKER_AGENT>` subagent per non-empty lane. It never works an issue itself. Locking is per-issue
-(claim comments, see [`README.md`](README.md)), so lane workers may run concurrently; a fresh lock
-only removes that one issue from eligibility, never aborts the run.
+**Not a lane worker.** The prompt behind the `sdlc-dispatch` scheduled task: per-issue wip gate
+(reap stale locks only), machine-locked git + worktree maintenance, then one `<WORKER_AGENT>`
+subagent per non-empty lane. It never works an issue itself. There is **no dispatcher singleton**:
+any number of dispatch runs — different machines, or overlapping scheduled/manual runs on one
+machine — may execute concurrently. Locking is per-issue (claim comments, see
+[`README.md`](README.md)) plus a per-machine maintenance lock; every GitHub-side write here is
+idempotent. A fresh per-issue lock only removes that one issue from eligibility, never aborts the
+run.
 
 This file is the canonical, reviewable copy; the scheduled task is a thin pointer that reads it and
 executes one pass.
@@ -22,7 +25,7 @@ You are the SDLC pipeline dispatcher for the `<PROJECT>` project.
 
 Repository (local working directory): `<REPO_PATH>`
 
-Run ONE dispatch cycle: dispatcher singleton gate, per-issue wip gate (reap stale locks), git +
+Run ONE dispatch cycle: machine maintenance lock, per-issue wip gate (reap stale locks), git +
 worktree maintenance, then each stage worker at most once — intake, build, verify, audit, ship
 (`stage:queued` has no worker; it is the human throttle). Each worker runs as an ISOLATED subagent
 (Agent tool, `subagent_type: <WORKER_AGENT>` — deliberately has no Agent tool, so workers cannot
@@ -35,42 +38,87 @@ every worker; workers use it in their claim comments.
 > If `<TOKEN_TOOL>` is set for this project, prefix every git/gh command with it (it compacts output
 > when it has a matching filter and passes through unchanged otherwise). Otherwise ignore.
 
-### Step -1 — Dispatcher singleton gate
+### Step -1 — Concurrency model + machine maintenance lock
 
-Two dispatchers must not run maintenance concurrently. The pinned issue titled `sdlc:dispatch-lock`
-(create it once, label `sdlc:hold` so no worker touches it) is the mutex:
+There is **no dispatcher singleton and no global lock.** Concurrent dispatch runs are expected and
+safe under three rules:
 
-- Read its most recent comment. `lock <run-id> <ISO timestamp>` younger than 2 hours with no
-  matching `unlock` → another dispatcher is live. Output one line:
-  `sdlc-dispatch: aborted — dispatcher lock held by <run-id> (<age>)`. Do nothing else.
-- Otherwise comment `lock <your run-id> <now>`. At the very end of the cycle, comment
-  `unlock <your run-id>`. A stale lock (≥2h, no unlock) is dead — note it in the digest and proceed;
-  your fresh `lock` comment supersedes it.
+1. **Per-issue state is optimistically locked** by worker claims (README universal loop, CLAIM
+   step 3) — this works identically across machines because the issue tracker is the shared store.
+2. **Every GitHub-side write in this prompt is idempotent and verify-before-write.** Label changes
+   converge (labels are sets — applying the same change twice yields the same state); comments are
+   run-id-tagged (a duplicate is attributable noise, never damage); and any write whose
+   precondition came from the Step 0 snapshot re-checks that precondition against live data
+   immediately before writing. Losing a race is never an error — record it and move on.
+3. **Machine-local maintenance (Step 0a) is serialized per machine** by a filesystem lock. Two runs
+   on one machine must not concurrently prune branches/worktrees or rebuild a local artifact; runs
+   on different machines share no local state and never contend.
+
+**Machine lock protocol.** The lock is the directory `<REPO_PATH>/.git/sdlc-maint.lock` (inside
+`.git`: never tracked, never swept by git):
+
+- **Acquire:** create the directory with fail-if-exists semantics (directory creation is atomic —
+  exactly one contender succeeds; e.g. POSIX `mkdir`, or PowerShell
+  `New-Item -ItemType Directory` without `-Force`). On success, write `owner.txt` inside it
+  containing `<run-id> <now ISO 8601>`.
+- **Creation failed → lock held.** Read `owner.txt`:
+  - Younger than **30 minutes** → a live run is doing maintenance. Skip Step 0a this cycle and
+    record `maintenance: skipped (lock held by <run-id>, <age>)`. (30 min, not the 2 h worker
+    threshold: maintenance takes minutes, so a longer freeze only delays recovery.)
+  - Older than 30 minutes (holder presumed dead) → reap by **rename**: move the lock dir to
+    `sdlc-maint.lock.stale-<your run-id>` (rename is atomic — exactly one contender wins), then
+    delete the renamed dir and acquire normally as above. Rename failed → another run just reaped
+    it or holds it; treat as lock held (skip Step 0a).
+- **Release:** delete the lock dir at the **end of Step 0a** — not the end of the cycle; lane
+  dispatch never needs it.
+- **Never abort the cycle over this lock.** Whatever its outcome, proceed to Step 0 and per-lane
+  dispatch; only Step 0a is conditional on holding it.
+
+If your repo carries the reference CLI (`tools/sdlc.mjs`, see `docs/Adoption.md`), the protocol is
+one command each way: `node tools/sdlc.mjs maint-lock <run-id>` (exit 1 = held; skip Step 0a) and
+`node tools/sdlc.mjs maint-release <run-id>`.
 
 ### Step 0 — Snapshot + per-issue wip gate
 
 Take ONE issue snapshot that serves the whole cycle:
-`gh issue list --state open --json number,labels,updatedAt --limit 200`
-From it compute locally: `sdlc:wip` items, per-lane depths, and the `sdlc:needs-human` / `sdlc:hold`
-lists.
+`gh issue list --state open --json number,labels,createdAt --limit 200`
+From it compute locally: `sdlc:wip` items, per-lane depths, the `sdlc:needs-human` / `sdlc:hold`
+lists, and each lane's candidate list for the worker prompts (per-lane dispatch step 2 —
+`createdAt` is what workers FIFO-order candidates by).
 
 For each `sdlc:wip` item, fetch its most recent `sdlc:claim` comment (that comment's timestamp and
 run-id are the lock's age and owner — do NOT use `updatedAt`, which any comment resets):
 
 - **Claim younger than 2 hours → live worker.** Leave it; the issue is simply ineligible this cycle.
   Do not abort the run.
-- **Claim (or bare label with no claim comment) older than 2 hours → reap.** Remove `sdlc:wip`,
-  leave every other label untouched (the item re-enters its lane), and comment:
+- **Bare label with no claim comment:** age is the `labeled` event timestamp from the issue
+  timeline (`gh api repos/<owner>/<repo>/issues/<n>/timeline`), NOT the snapshot's `updatedAt`. If
+  the event can't be found, leave the item and record it — never reap on unprovable age.
+- **Claim (or bare label) older than 2 hours → reap, verify-before-write.** The snapshot may be
+  stale under concurrent dispatchers: another run may have already reaped this issue and a new
+  worker claimed it since. So immediately before writing, re-fetch the issue's newest `sdlc:claim`
+  comment and recompute the age. Still ≥2h → remove `sdlc:wip`, leave every other label untouched
+  (the item re-enters its lane), and comment:
   `sdlc-dispatch: reaped stale sdlc:wip lock owned by <run-id or "unknown"> (no activity ≥2h —
-  worker presumed dead). Item re-enters its lane.` Leave the issue's worktree in place — the next
-  worker reuses it (build's CONTINUE case depends on this).
+  worker presumed dead). Item re-enters its lane.` Fresh claim appeared → leave it, record
+  `reap skipped — fresh claim by <run-id>`. Leave the issue's worktree in place — the next worker
+  reuses it (build's CONTINUE case depends on this).
 - Never touch `sdlc:needs-human`, `sdlc:hold`, or any human-set state.
 - Record reaps for the digest.
 
 ### Step 0a — Git + worktree maintenance (you do this yourself)
 
+Run this step **only while holding the machine lock from Step -1** (skipped it → go straight to
+per-lane dispatch). Release the lock when this step ends, success or not.
+
 Keep the local repo fresh WITHOUT ever touching any working tree. **Never stash, never force-checkout,
 never discard or overwrite uncommitted files — in the main tree or any worktree.**
+
+Another dispatch run's *workers* may be running git commands on this machine concurrently — the
+machine lock serializes maintenance runs, not workers. Git's own ref locks make that safe: treat
+any `cannot lock ref` / `.lock exists` failure as transient contention — retry once, then skip that
+operation and record it. Git also refuses to delete a branch checked out in any worktree; treat
+that refusal as "in use — leave it", never force.
 
 1. `git fetch origin --prune`.
 2. Update local `<DEFAULT_BRANCH>` without checking it out:
@@ -81,8 +129,13 @@ never discard or overwrite uncommitted files — in the main tree or any worktre
    `<DEFAULT_BRANCH>` (a dogfooded binary, a generated bundle), rebuild it here — but ONLY when step 2
    moved the tip AND the tree you build from is clean (`git status --porcelain` shows no relevant
    uncommitted changes); never bake uncommitted code into it. Dirty or failed build → keep the old
-   artifact, record it. This runs before any worker spawns, so nothing holds the artifact open. Omit
-   if the project has no such artifact.
+   artifact, record it. Under concurrent dispatch, never assume nothing holds the artifact open —
+   another run's workers may be executing it right now. If the artifact is a running executable,
+   deploy **versioned**: build into a per-version directory (e.g. `<sha>`-named), then atomically
+   repoint a link/junction at it — never overwrite the directory a live process executes from.
+   Running processes keep their old version; GC old version dirs that aren't the link target
+   (a dir that refuses deletion is still executing — leave it, record it). Omit if the project has
+   no such artifact.
 4. **Worktree sweep:** `git worktree list`. For each `<WORKTREE_ROOT>/<issue#>` worktree whose branch
    is merged to `<DEFAULT_BRANCH>` (checks in step 5) or deleted upstream with the issue closed: if
    its tree is clean, `git worktree remove` it; dirty → leave it, record it. Finish with
@@ -100,7 +153,10 @@ never discard or overwrite uncommitted files — in the main tree or any worktre
    `CONFLICTING` and whose linked issue is not `sdlc:wip`/`sdlc:needs-human`/`sdlc:hold`: comment on
    the issue `sdlc-dispatch: branch <name> conflicts with <DEFAULT_BRANCH> — needs a merge`, and if
    the issue sits in `stage:verify`/`stage:audit`/`stage:ship`, swap it back to `stage:build`
-   (conflict resolution is build's lane). Record for the digest.
+   (conflict resolution is build's lane). Verify-before-write: re-read the issue's labels
+   immediately before the swap (already `stage:build` or now `sdlc:wip` → skip), and skip the
+   comment if the issue's newest `sdlc-dispatch:` conflict comment already names the same branch —
+   another dispatch run got there first. Record for the digest.
 
 ### Per-lane dispatch
 
@@ -124,12 +180,17 @@ design lane):
    | ship | mid (sonnet-class) | docs fan-out + PR ritual; template-shaped work |
 
    Escalate a lane one tier only after its worker BOUNCEs the same issue twice for
-   capability-shaped reasons (not genuinely-broken code). Prompt (substitute the
-   lane and run-id): "You are an autonomous SDLC pipeline worker for the `<PROJECT>` project.
+   capability-shaped reasons (not genuinely-broken code). Prompt (substitute the lane, run-id, and
+   candidate list): "You are an autonomous SDLC pipeline worker for the `<PROJECT>` project.
    Repository (local working directory): `<REPO_PATH>`. Your run-id is `<run-id>-<lane>`. Read
    prompts/sdlc/README.md — its universal worker loop and invariants are binding. Then execute the
-   lane prompt at prompts/sdlc/<lane>.md. If there is no eligible item, report idle. Return your
-   one-line result plus any PARK/BOUNCE specifics."
+   lane prompt at prompts/sdlc/<lane>.md. Candidate snapshot for your lane (from this cycle's
+   Step 0 snapshot — seeds selection only; claim per the README against live data):
+   <for each eligible item: `#<number> labels=[<label,...>] createdAt=<createdAt>`>. If no
+   candidate can be claimed, report idle. Return your one-line result plus any PARK/BOUNCE
+   specifics, ending with the fenced JSON result block per the README STOP contract." Build the
+   candidate list from the same Step 0 snapshot as step 1 (the lane's eligible items only, all
+   three fields per item); a fresh per-lane re-query happens only in the step-1 ADVANCE case.
 3. **Concurrency:** lane workers claim per-issue and work in issue-scoped worktrees, so they may run
    concurrently — spawn all non-empty lanes' workers in one batch and wait for all. Exception: run
    intake before the batch when its merge sweep has pending merges to process, and run a lane serially
@@ -137,18 +198,27 @@ design lane):
    the same lane in one cycle. The intake-first exception is load-bearing: intake's merge sweep is the
    only thing that processes merged PRs, so skipping intake because its lane looks empty would skip the
    merge sweep entirely — run it whenever merges are pending, even with zero `stage:intake` items.
-4. **Self-heal check (after each worker finishes):** parse the claimed issue # from the worker's
-   result, then `gh issue view <n> --json labels` plus its latest `sdlc:claim` comment. If it still
-   carries `sdlc:wip` AND the claim's run-id belongs to this cycle (`<run-id>-<lane>`): resume that
-   worker ONCE via SendMessage — complete the EMIT step now. Still locked after the resume → remove
-   `sdlc:wip`, add `sdlc:needs-human`, comment `sdlc-dispatch: worker stalled twice without emitting
-   an outcome; parked for human review.` A claim owned by a different run-id is another live worker —
-   leave it alone.
+   Other dispatch runs may have live workers in the same lanes right now — that's expected: workers
+   deconflict per issue (CLAIM step 3), and a worker that loses a claim race just moves to the next
+   eligible item. A lost race is never an error.
+4. **Self-heal check (after each worker finishes):** read the worker's fenced JSON result block
+   (README STOP contract: `{issue, outcome, next_stage, notes}`, or an array of those for a
+   multi-item pass) — it is the authoritative record of what was claimed and how it ended. Block
+   missing or malformed → fall back to parsing the prose one-liner and record the contract
+   violation for the digest. For each non-IDLE result: `gh issue view <n> --json labels` plus its
+   latest `sdlc:claim` comment. If it still carries `sdlc:wip` AND the claim's run-id belongs to
+   this cycle (`<run-id>-<lane>`): resume that worker ONCE via SendMessage — complete the EMIT step
+   now. Still locked after the resume → remove `sdlc:wip`, add `sdlc:needs-human`, comment
+   `sdlc-dispatch: worker stalled twice without emitting an outcome; parked for human review.` A
+   claim owned by a different run-id is another live worker — leave it alone.
 
 ### Digest
 
-Finish with: dispatcher-lock result; wip gate result (live locks left, stale locks reaped); git +
-worktree maintenance (`<DEFAULT_BRANCH>` updated, artifact rebuilt/kept, branches pruned/left,
-worktrees removed/left, conflicted PRs flagged, skipped ops, open-PR state); one line per lane; queue
-depths after the cycle; parked items and holds by issue number; token cost per lane plus cycle total.
-Then post the `unlock` comment on the dispatch-lock issue.
+Finish with: machine-lock result (acquired / skipped — held by whom / stale-reaped); wip gate result
+(live locks left, stale locks reaped, reaps skipped on fresh claims); git + worktree maintenance
+(`<DEFAULT_BRANCH>` updated, artifact rebuilt/kept, branches pruned/left, worktrees removed/left,
+conflicted PRs flagged, skipped ops, open-PR state); one line per lane, derived from each worker's
+JSON result block (issue, outcome, next_stage — note any worker whose block was missing/malformed
+and required prose fallback); queue depths after the cycle; parked items and holds by issue number;
+token cost per lane plus cycle total. The machine lock was already released at the end of Step 0a —
+nothing is held after the digest.

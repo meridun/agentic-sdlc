@@ -55,21 +55,22 @@ implements to, verify exercises, and audit reviews for. Be specific and concrete
 Copy `tools/sdlc.mjs` into your repo (plain Node, no dependencies) and adapt the constants at the
 top — `DEFAULT_BRANCH`, `PROD_BRANCH`, and the worktree naming function. Then wire the lane prompts
 to it: wherever a prompt describes the claim lock, stage swap, or dispatcher gate ritual, have
-workers run the CLI one-shot instead (`node tools/sdlc.mjs claim|advance|gate|lock|lanes|…`).
+workers run the CLI one-shot instead (`node tools/sdlc.mjs claim|advance|gate|maint-lock|lanes|…`).
 
 Why bother: `advance` validates every transition against the stage graph, which kills the
-hand-typed label-typo class (`stage:verfy`) by construction, and it makes the gate, dispatcher
-lock, and claim-verify race check deterministic — the agent supplies judgment (what to spawn, what
-to write in comments), the CLI supplies the state math. The pure helpers are exported and the
+hand-typed label-typo class (`stage:verfy`) by construction, and it makes the gate, machine
+maintenance lock, and claim-verify race check deterministic — the agent supplies judgment (what to
+spawn, what to write in comments), the CLI supplies the state math. The pure helpers are exported and the
 gh/git executors injectable, so you can unit-test your adaptations without touching GitHub.
 
 ## 5. Choose your variant
 
 - Small backlog / single tree → **serial** (see [AgenticSDLC.md](AgenticSDLC.md#concurrency-variants);
   simplify `dispatch.md` per the note there, and you can ignore the worktree steps).
-- Throughput matters → keep the shipped **per-issue** model. Create the `sdlc:dispatch-lock` pinned
-  issue once (`gh issue create --title sdlc:dispatch-lock --body "dispatcher mutex" --label sdlc:hold`,
-  then pin it), and confirm your platform allows git worktrees.
+- Throughput matters → keep the shipped **per-issue** model. Nothing to create up front: there is
+  no dispatcher singleton — overlapping dispatch runs deconflict via per-issue claims, idempotent
+  GitHub writes, and a per-machine maintenance lock the dispatcher creates automatically at
+  `.git/sdlc-maint.lock`. Just confirm your platform allows git worktrees.
 
 Decide whether you want the optional `stage:design` lane (add the label + the shipped
 `prompts/sdlc/design.md` worker) or fold design into intake (shipped default).
@@ -110,6 +111,6 @@ conflict scan are scripted too and you've observed several clean cycles.
 
 ## 9. Watch the first few cycles
 
-The dispatcher's digest (end of every run) is your dashboard: lock result, git maintenance, one line
-per lane, queue depths, parked items, and **token cost per lane + cycle total**. That token line is the
+The dispatcher's digest (end of every run) is your dashboard: machine-lock result, git maintenance,
+one line per lane, queue depths, parked items, and **token cost per lane + cycle total**. That token line is the
 trend to watch for cost regressions. Parked (`sdlc:needs-human`) items are your action queue.

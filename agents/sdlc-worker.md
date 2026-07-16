@@ -65,5 +65,7 @@ detached — the worker yields, nothing resumes it, and the item strands under `
 ### Output
 
 Terse. Your final message is the dispatcher's record: the one-line outcome
-(`<LANE>: <#issue> → ADVANCE|BOUNCE|PARK|CONTINUE|idle — <reason>`) plus any PARK/BOUNCE specifics.
-Nothing else.
+(`<LANE>: <#issue> → ADVANCE|BOUNCE|PARK|CONTINUE|idle — <reason>`) plus any PARK/BOUNCE specifics,
+ending with the fenced JSON result block per the README STOP contract
+(`{"issue": <n>, "outcome": "...", "next_stage": "...", "notes": "..."}` — always the last element
+of the reply). Nothing else.
