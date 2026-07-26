@@ -99,13 +99,14 @@ checkout.
 ### Step 0 — Snapshot + per-issue wip gate
 
 Take ONE issue snapshot that serves the whole cycle:
-`gh issue list --state open --json number,labels,updatedAt --limit 200`
+`gh issue list --state open --json number,labels,createdAt --limit 200`
 From it compute locally: `sdlc:wip` items, per-lane depths, the `sdlc:needs-human` / `sdlc:hold`
-lists, and each open issue's `stage:*` label count (Step 0b). With the reference CLI, the
-`=== lanes ===` section of the `cycle-prep` report carries all of this: per-lane depths,
-CLAIM-ordered eligibility (with a `(hold N, needs-human N, wip N)` ineligibility breakdown when a
-lane's depth exceeds its eligible count — so a snapshot bug is distinguishable from expected
-ineligibility), and the ≠1-stage-label list.
+lists, each lane's candidate list for the worker prompts (per-lane dispatch step 2 — `createdAt`
+is what workers FIFO-order candidates by), and each open issue's `stage:*` label count (Step 0b).
+With the reference CLI, the `=== lanes ===` section of the `cycle-prep` report carries all of
+this: per-lane depths, CLAIM-ordered eligibility (with a `(hold N, needs-human N, wip N)`
+ineligibility breakdown when a lane's depth exceeds its eligible count — so a snapshot bug is
+distinguishable from expected ineligibility), and the ≠1-stage-label list.
 
 For each `sdlc:wip` item, fetch its most recent `sdlc:claim` comment (that comment's timestamp and
 run-id are the lock's age and owner — do NOT use `updatedAt`, which any comment resets):
@@ -226,13 +227,17 @@ the human throttle):
    | ship | mid (sonnet-class) | docs fan-out + PR ritual; template-shaped work |
 
    Escalate a lane one tier only after its worker BOUNCEs the same issue twice for
-   capability-shaped reasons (not genuinely-broken code). Prompt (substitute the
-   lane and run-id): "You are an autonomous SDLC pipeline worker for the `<PROJECT>` project.
+   capability-shaped reasons (not genuinely-broken code). Prompt (substitute the lane, run-id, and
+   candidate list): "You are an autonomous SDLC pipeline worker for the `<PROJECT>` project.
    Repository (local working directory): `<REPO_PATH>`. Your run-id is `<run-id>-<lane>`. Read
    prompts/sdlc/README.md — its universal worker loop and invariants are binding. Then execute the
-   lane prompt at prompts/sdlc/<lane>.md. If there is no eligible item, report idle. Return your
-   one-line result plus any PARK/BOUNCE specifics, ending with the fenced JSON result block per the
-   README STOP contract."
+   lane prompt at prompts/sdlc/<lane>.md. Candidate snapshot for your lane (from this cycle's
+   Step 0 snapshot — seeds selection only; claim per the README against live data):
+   <for each eligible item: `#<number> labels=[<label,...>] createdAt=<createdAt>`>. If no
+   candidate can be claimed, report idle. Return your one-line result plus any PARK/BOUNCE
+   specifics, ending with the fenced JSON result block per the README STOP contract." Build the
+   candidate list from the same Step 0 snapshot as step 1 (the lane's eligible items only, all
+   three fields per item); a fresh per-lane re-query happens only in the step-1 ADVANCE case.
 3. **Concurrency:** lane workers claim per-issue and work in issue-scoped worktrees, so they may run
    concurrently — spawn all non-empty lanes' workers in one batch and wait for all. Exception: run
    intake before the batch when its merge sweep has pending merges to process — check the sweep

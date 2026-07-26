@@ -48,21 +48,28 @@ comfortably.
 ## Universal worker loop (binding)
 
 1. **CLAIM** — eligible = open issues labeled `stage:<lane>` that are **NOT** labeled `sdlc:wip`,
-   `sdlc:needs-human` (parked), or `sdlc:hold` (human keep-off). The next one is higher priority
-   first (`priority:critical` › `priority:medium` › `priority:future`), then oldest by creation
-   date (FIFO). If none → reply `<LANE>: idle` and stop.
+   `sdlc:needs-human` (parked), or `sdlc:hold` (human keep-off). If the invoking message supplies a
+   **candidate snapshot** for the lane (issue#, labels, createdAt — the dispatcher inlines one from
+   its Step 0 snapshot), select from that list instead of re-querying; without one (e.g. a manual
+   run), self-query as above. The snapshot only seeds candidate selection, never ownership — the
+   claim race always runs against live GitHub data, so a stale entry (closed, relabeled, or claimed
+   since the snapshot) just loses the claim; move to the next candidate. Pick the next: higher
+   priority first (`priority:critical` › `priority:medium` › `priority:future`), then oldest by
+   creation date (FIFO). If none (or the snapshot is exhausted) → reply `<LANE>: idle` and stop.
 
    **CLI-first** (the primary path when the reference CLI is present — `tools/sdlc.mjs`, see
    `docs/Adoption.md`): do **not** re-derive the pick rule by eyeball (the eyeballed mis-claim is
-   a known failure class — lesson of #640). `node tools/sdlc.mjs claim --next <lane> <run-id>`
-   computes the next eligible issue (same ordering as above), adds `sdlc:wip`, posts the claim
-   comment `sdlc:claim <run-id> <lane>` (run-id = the dispatcher-supplied id, or any unique id you
-   mint for a manual run), and runs the claim-verify race check — retrying the next eligible item
-   on a lost race. It prints `claimed #<issue>` on success, or exits non-zero with `idle` on an
-   empty lane. Already know the issue (e.g. build's CONTINUE resumption)? Claim it directly:
-   `node tools/sdlc.mjs claim <issue> <run-id> <lane> --verify` — same race semantics; a non-zero
-   exit means you lost, pick the next eligible item yourself. On a lost race the CLI edits **only
-   your own losing claim comment** to note `(superseded)` — never the winner's.
+   a known failure class — lesson of #640). With a candidate snapshot (or an already-known issue,
+   e.g. build's CONTINUE resumption), claim it directly:
+   `node tools/sdlc.mjs claim <issue> <run-id> <lane> --verify` — a non-zero exit means you lost
+   the race; move to the next candidate. Without a snapshot,
+   `node tools/sdlc.mjs claim --next <lane> <run-id>` computes the next eligible issue (same
+   ordering as above), adds `sdlc:wip`, posts the claim comment `sdlc:claim <run-id> <lane>`
+   (run-id = the dispatcher-supplied id, or any unique id you mint for a manual run), and runs the
+   claim-verify race check — retrying the next eligible item on a lost race. It prints
+   `claimed #<issue>` on success, or exits non-zero with `idle` on an empty lane. On a lost race
+   the CLI edits **only your own losing claim comment** to note `(superseded)` — never the
+   winner's.
 
    **Manual ritual (fallback, for CLI-less forks)** — take the lock in this order:
    1. Add `sdlc:wip` to the chosen issue.
