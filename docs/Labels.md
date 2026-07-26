@@ -7,12 +7,12 @@ The pipeline is driven entirely by GitHub labels. Create these once per repo.
 | Label | Colour | Meaning |
 |---|---|---|
 | `stage:intake` | `#0e8a16` | Awaiting triage/routing. |
-| `stage:queued` | `#fbca04` | Triaged, ready to build — **the human throttle**. No worker. |
+| `stage:design` | `#c5def5` | Awaiting design — the implementation plan (spec track, every item); plus UX artifacts when the profile binds them. |
+| `stage:queued` | `#fbca04` | Planned, awaiting admission — **the human throttle** (reviews the body's `## Implementation plan`). No worker. |
 | `stage:build` | `#1d76db` | Being implemented (or waiting to be). |
 | `stage:verify` | `#5319e7` | Awaiting full-suite + real-run validation. |
 | `stage:audit` | `#b60205` | Awaiting read-only security/invariant review. |
 | `stage:ship` | `#0052cc` | Awaiting docs fan-out + PR. |
-| `stage:design` | `#c5def5` | *(optional)* Awaiting design/storyboard. Omit if folding design into intake. |
 | `sdlc:wip` | `#d93f0b` | Per-issue lock. Machine-owned, volatile. Paired with an `sdlc:claim` comment. |
 | `sdlc:needs-human` | `#e99695` | Parked — a worker needs a human decision. Automation never advances it. |
 | `sdlc:hold` | `#000000` | Human keep-off. No worker touches it. Also marks the dispatcher-lock issue. |
@@ -22,13 +22,26 @@ The pipeline is driven entirely by GitHub labels. Create these once per repo.
 | `blocked` | `#d876e3` | *(optional)* Item bounced to queued as not-yet-buildable; readiness axis. |
 | `ready` | `#0e8a16` | *(optional)* Blocker cleared; complements `blocked`. |
 
-## Zero stage labels is not (usually) corrupt
+## Exactly one stage label per open issue
 
-An open issue with **zero** `stage:*` labels is a **legitimate** state: post-ship awaiting PR merge
-(ship's ADVANCE removes the stage; the merge closes the issue), or an issue simply not (yet)
-triaged into the pipeline. It is corrupt only when `sdlc:wip` or
-`sdlc:needs-human` remains on it — a machine flag with no lane means a worker died mid-transition.
-**Multiple** `stage:*` labels are always corrupt (the item is eligible in two lanes at once).
+Every open issue carries **exactly one** `stage:*` label — the pipeline invariant the dispatcher
+enforces (dispatch.md Step 0b). **Zero** stage labels makes an issue invisible to every lane
+forever (a triage escapee that will never be built or closed): the dispatcher auto-repairs it to
+`stage:intake` (verify-before-write) — intake is the safe re-entry, re-routing or reconciling from
+there. That covers the post-ship window too: ship's terminal ADVANCE removes `stage:ship` and the
+merge normally closes the issue promptly; an issue that outlives a dispatch cycle awaiting merge
+is routed back through intake, whose evidence-based reconciliation (open PR in flight / already
+merged) is a safe no-op or a PARK-with-evidence, never duplicate work. **Two or more** `stage:*`
+labels make an issue eligible in two lanes at once — two workers could claim it in one cycle — so
+the dispatcher parks it (`sdlc:needs-human`) for a human to pick: a snapshot can't adjudicate the
+right stage. `sdlc:wip` or `sdlc:needs-human` on a zero-stage issue means a worker died
+mid-transition; the same repair applies.
+
+The runtime check is a **hand-edit backstop**: the reference CLI's transition validation never
+creates a zero/dual-stage state, but labels edited by hand or by tooling outside the CLI still
+can. A fork whose tracker substrate cannot hold the invariant (e.g. a state field that must pass
+through a stageless value) declares the deviation in its `PROFILE.md` rather than silently
+diverging.
 
 ## Create them (`gh`)
 
@@ -38,13 +51,12 @@ the label already exists).
 ```bash
 # stages
 gh label create "stage:intake"  --color 0e8a16 --description "Awaiting triage/routing" --force
-gh label create "stage:queued"  --color fbca04 --description "Ready to build — human throttle (no worker)" --force
+gh label create "stage:design"  --color c5def5 --description "Awaiting implementation plan (+ UX artifacts when bound)" --force
+gh label create "stage:queued"  --color fbca04 --description "Plan reviewed here — human throttle (no worker)" --force
 gh label create "stage:build"   --color 1d76db --description "Being implemented" --force
 gh label create "stage:verify"  --color 5319e7 --description "Awaiting validation" --force
 gh label create "stage:audit"   --color b60205 --description "Awaiting security/invariant review" --force
 gh label create "stage:ship"    --color 0052cc --description "Awaiting docs fan-out + PR" --force
-# optional design lane
-gh label create "stage:design"  --color c5def5 --description "Awaiting design/storyboard (optional)" --force
 
 # sdlc control
 gh label create "sdlc:wip"          --color d93f0b --description "Per-issue lock (machine-owned)" --force

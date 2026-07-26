@@ -12,14 +12,16 @@ worker can die mid-pass and the next scheduled run picks up exactly where the is
 comments say things stand.
 
 ```
- raw idea ─▶ intake ─▶ [queued] ─▶ build ─▶ verify ─▶ audit ─▶ ship ─▶ PR ─▶ (human merges) ─▶ closed
-             triage    human       write     prove     review    docs +
-             + route   throttle     code      it works  it's safe open PR
+ raw idea ─▶ intake ─▶ design ─▶ [queued] ─▶ build ─▶ verify ─▶ audit ─▶ ship ─▶ PR ─▶ (human merges) ─▶ closed
+             triage    plan the   human       write     prove     review    docs +
+             + route   approach   throttle    code      it works  it's safe open PR
 ```
 
 The **canonical spine** (see [Composability.md](Composability.md)) names nine stages:
-`intake → [design] → queued → build → verify → audit → ready → shipping → complete`, with two
-human gates (`queued` and `ready`). The shipped template implements the collapsed tail: `ship`
+`intake → design → queued → build → verify → audit → ready → shipping → complete`, with two
+human gates (`queued` and `ready`). `design` is a **standard stage** — its spec track (a reviewed
+implementation plan in the issue body) always runs; its UX/storyboard track is an optional module
+for user-facing forks. The shipped template implements the collapsed tail: `ship`
 does docs + PR, the human merge **is** the `ready` gate, and `shipping → complete` collapse into
 merge-and-close. Multi-repo forks make the tail explicit; both forms conform.
 
@@ -52,21 +54,33 @@ merge-and-close. Multi-repo forks make the tail explicit; both forms conform.
    lock only when its claim comment is ≥2h old (two full hourly cycles — no legitimate pass runs that
    long), and **verify-before-write**: it re-fetches the newest claim immediately before stripping,
    because its snapshot may be stale under concurrent dispatch runs. A fresh lock is a live worker
-   and is left alone; an unprovable age is left alone too. Human-set labels (`sdlc:needs-human`,
+   and is left alone; an unprovable age is left alone too. Reaped issues **keep their worktrees** —
+   the next worker reuses them (build's CONTINUE resumption depends on it). For a stall it detects
+   in its *own* cycle, the dispatcher self-heals by resuming the worker **once**, then parking the
+   item `sdlc:needs-human` — never an unbounded retry loop. Human-set labels (`sdlc:needs-human`,
    `sdlc:hold`) are never touched by any automation.
 
 5. **Bounce to the lane that owns the failure; park for the human.** A red test bounces to build; a
-   security defect bounces to build; an undecided question bounces to intake (or design); a risk
-   tradeoff or a "the design itself is wrong" call PARKs to a human via `sdlc:needs-human`. Failures
-   flow to accountability, not in a circle.
+   security defect bounces to build; an undecided product question bounces to intake, a spec gap to
+   design; a risk
+   tradeoff or a "the design itself is wrong" call PARKs to a human via `sdlc:needs-human`. A build
+   blocked by a dependency is a **readiness regression**, not a build failure: flip the item's
+   `ready` label to `blocked` and bounce it to `stage:queued`, so the human throttle gates
+   re-entry when the blocker clears — that gate is what stops a silent queued→build→queued loop.
+   Failures flow to accountability, not in a circle.
 
 ## The label protocol
 
-- `stage:intake` · `stage:build` · `stage:verify` · `stage:audit` · `stage:ship` — the lane an issue
-  is in. Exactly one at a time. Optionally `stage:design`.
-- `stage:queued` — **workerless**. The human throttle between intake and build: the only gate a human
-  must open by hand. This is what prevents a runaway pipeline from consuming build capacity on
-  half-baked ideas.
+- `stage:intake` · `stage:design` · `stage:build` · `stage:verify` · `stage:audit` · `stage:ship`
+  — the lane an issue is in. **Exactly one per open issue** — the dispatcher's integrity check
+  auto-repairs a zero-stage issue to `stage:intake` and parks a multi-stage one (see
+  [Labels.md](Labels.md)).
+- `stage:queued` — **workerless**. The human throttle between design and build: the only gate a human
+  must open by hand. What the human reviews there is design's `## Implementation plan` in the issue
+  body — approving an *approach*, not just an idea (rejecting a wrong approach at queued costs one
+  design pass; rejecting it at audit costs a build+verify cycle). Approve = admit to `stage:build`;
+  reject = bounce to `stage:design` with a comment. This is what prevents a runaway pipeline from
+  consuming build capacity on half-baked ideas.
 - `sdlc:wip` — the per-issue lock. Machine-owned, volatile: workers set/clear it, the reaper may strip
   it. Paired with an `sdlc:claim <run-id> <lane>` comment that records ownership + timestamp.
 - `sdlc:needs-human` — parked. A worker hit something only a human can decide. Automation never
@@ -104,19 +118,42 @@ The template ships the **per-issue** model. A simpler **serial** model exists �
 To switch a shipped pipeline to serial: drop the dispatcher's Step -1 and the claim-comment steps,
 replace Step 0's per-issue gate with the global abort-or-reap, and run the per-lane loop serially.
 
-## Optional design lane
+## The design stage — standard, with two tracks
 
-UI/UX-heavy work benefits from a `stage:design` lane between intake and queued: intake routes a
-design-owed item to `stage:design`, a design worker storyboards/specs the change, and only then does it
-reach `stage:queued`. CLI / library / backend projects skip the lane and fold design questions into
-intake as **decision debates** — intake PARKs with the options framed in-issue, the human decides, and
-intake records a `<DECISION_RECORD>` one-liner before routing onward. The worker prompt ships
-(`prompts/sdlc/design.md`) but the default pipeline leaves the lane off; enable it (create the
-`stage:design` label and dispatch the lane) if your work is user-facing and worth storyboarding.
+**Every triaged item passes through `stage:design`** (the only bypass is work intake finds already
+built, which routes to the earliest absent artifact, floor `stage:verify`). The lane runs two
+tracks with deliberately different human seams (`prompts/sdlc/design.md`):
+
+- the **UX track** (an optional module — only for forks that bind `<DESIGN_ARTIFACTS>` in their
+  profile, and only when visual/UX design is still owed): build the competing storyboards/mockups,
+  then **PARK** for the human's A/B/C pick;
+- the **spec track** (every item, after the pick when both apply): write the implementation plan
+  into the issue body and **ADVANCE**. Design-exempt work (bug fix, refactor, infra) gets a
+  spec-lite — the same headings, a line each — not storyboards.
+
+The two seams differ on purpose — this is the **two-human-seams principle**: *open decisions park
+inside the phase that needs the answer; completed artifacts get reviewed at the gate after it.*
+The A/B/C pick is a *missing input* with no default — the spec depends on it, so the phase can't
+finish without the answer, and PARK begs for attention. The spec is a *completed output* with a
+reasonable default (the worker's judgment) — the human's role is veto at the queued gate, where
+silence is fine and items batch by capacity.
+
+Product/scope questions stay at intake as **decision debates** — intake PARKs with the options
+framed in-issue, the human decides, and intake records a `<DECISION_RECORD>` one-liner before
+routing onward. Design owns the UX pick and the plan; intake owns whether/what to build at all.
 
 ## Why the issue thread is the only state
 
-Everything a downstream stage needs, the upstream stage writes into the issue as a comment: build's
-branch name and plan, verify's report and evidence, audit's findings. A worker reconstructs its entire
+Everything a downstream stage needs, the upstream stage writes onto the issue. **Durable artifacts
+live in the body as owned sections** (original author text preserved on top): intake's
+`## Requirements` + `## Acceptance criteria`, design's `## Design` + `## Implementation plan` —
+baseline `<DEFAULT_BRANCH>` SHA, approach + ordered steps, per-file changes with signatures/shapes/
+migrations, risky seams (with an invariant-impact line), test strategy, out of scope. The plan is
+**detailed but not code** — it carries every *decision* so build makes only *expression*
+decisions; no code bodies or diffs. Plans state their baseline because they rot: build's spec-rot
+check re-validates a plan when `<DEFAULT_BRANCH>` has moved over its named paths, bouncing to
+design only on material invalidation. **Comments are protocol traffic**: claims, emits, PARK
+questions, build's branch name, verify's report and evidence, audit's findings. Workers edit only
+their own body sections. A worker reconstructs its entire
 context from `gh issue view` + the branch. This is what lets the whole thing survive process death,
 run headless on a cron, and be debugged by a human reading one issue top to bottom.
