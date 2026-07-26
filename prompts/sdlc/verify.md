@@ -36,24 +36,34 @@ written) → skip to **ADVANCE**. New commits invalidate a prior report — re-v
   point here is to catch regressions build's narrow run couldn't see), plus `<LINT_CMD>` and any
   project-mandated extra gate (race detector, type-check, integration pass) — everything `<INVARIANTS>`
   and `<LANG_CONVENTIONS>` require. Diagnose failures rather than papering over them.
+- **Known environment limitations — honor them, don't re-derive them.** If the project's profile
+  declares `<KNOWN_ENV_LIMITS>` (a gate that cannot run in this environment, its accepted
+  substitute, and the report wording), run the substitute and note the substitution in your report
+  in the declared wording — don't spend the pass rediscovering the limitation. A declared
+  limitation is **not** a PARK: PARK is for a genuinely un-standable environment, not a standing,
+  accepted one.
 - **Real run against the acceptance criteria** — green tests alone are **never** an ADVANCE:
   - Build/launch the software (`<BUILD_CMD>`) and exercise **each AC** through the real thing with
     real inputs. For each of `<INVARIANTS>`, force the path that would violate it and assert it holds.
-  - Prefer scripting the smoke as a **repeatable test** (`<SMOKE_CMD>` / a committed e2e or smoke
-    spec) over ad-hoc launching — repeatable and schedule-friendly. If the repo has a smoke/e2e
+  - Script the smoke as a **repeatable test** (`<SMOKE_CMD>` / a committed e2e or smoke spec) —
+    that committed spec is the **gating** real run, repeatable and schedule-friendly; interactive
+    or ad-hoc exploration is *exploratory only*, never the gate. If the repo has a smoke/e2e
     harness already, extend it; don't fork a second pattern. Commit any new spec to the **same feat
     branch** in the worktree and push (verify extends the suite; it cuts no new branch).
-  - Note any AC whose behavior is environment-dependent as unverified-on-<other-env> in the report
-    rather than skipping silently.
+  - **Don't silently skip an AC — keep a coverage ledger.** Record in the report which ACs are
+    unit-covered vs exercised end-to-end, and call out anything the real run could not demonstrate
+    (e.g. a server-side rejection only a unit test can force). Note any AC whose behavior is
+    environment-dependent as unverified-on-<other-env> rather than skipping silently.
   - If the environment genuinely cannot stand up, **PARK** — never ADVANCE on unit tests alone.
-- **Check the diff against build's plan comment** — the plan is the spec; an unexplained deviation
-  (files touched outside the plan with no ADVANCE-comment rationale) is a BOUNCE.
+- **Check the diff against the issue body's `## Implementation plan`** — the reviewed plan is the
+  spec; an unexplained deviation (files touched outside the plan with no ADVANCE-comment
+  rationale) is a BOUNCE.
 
 ### 3. EMIT exactly one outcome
 - **ADVANCE** — full suite + all mandated gates green **and** every AC exercised through the real run.
   Swap `stage:verify` → `stage:audit`, remove `sdlc:wip`. Comment the **verify report**: suites run
-  and results, which ACs were walked and how, evidence, and what audit should aim its security/
-  invariant pass at.
+  and results, the per-AC coverage ledger (which ACs were walked and how — unit vs end-to-end),
+  evidence, and what audit should aim its security/invariant pass at.
 - **BOUNCE → `stage:build`** — any test red, any AC unmet, any invariant violated, or a regression.
   Swap `stage:verify` → `stage:build`, remove `sdlc:wip`, comment the **specific** failure (test name
   + output, or the AC with observed-vs-expected). Build fixes on the same branch (idempotent continue).

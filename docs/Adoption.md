@@ -42,10 +42,12 @@ Grep for `<` across `prompts/` and `agents/` and replace every one. The full lis
 | `<LANG_CONVENTIONS>` | The lint/format/test bar in one line | `eslint clean, prettier applied, jest green` |
 | `<INVARIANTS>` | Project rules that are ACs on **every** change — list them | `no breaking API changes; all endpoints authz-checked; no PII in logs` |
 | `<DECISION_RECORD>` | Where decisions are logged (a doc section, a registry file) | `docs/Decisions.md` |
+| `<DESIGN_ARTIFACTS>` | *(optional, design UX track)* the fork's conventions for design artifacts — what storyboards/mockups are, where they live, how they're authored; leave unbound to run spec-track only | `docs/mockups/ per its README` |
+| `<KNOWN_ENV_LIMITS>` | *(optional, verify)* declared environment limitations: the gate that can't run, its accepted substitute, and the report wording — so verify honors them instead of rediscovering (or PARKing over) them each pass | `integration suite needs local MySQL — covered via Docker e2e` |
 | `<DOCS_SINKS>` | Documentation targets ship fans out to | `README.md, docs/API.md` |
 | `<DOCS_ROOT>` | *(optional, docs-tiers skill)* root of the L3 documentation tree | `docs/` |
 | `<DOC_DOMAINS>` | *(optional, docs-tiers skill)* thematic domain prefixes files route into | `Architecture_*, Testing_*, UserGuide_*` |
-| `<TOKEN_TOOL>` | *(optional)* shell-output compactor to prefix commands with; delete the mentions if none | `rtk` |
+| `<TOKEN_TOOL>` | *(optional)* shell-output compactor — either an explicit prefix on every command, or a transparent shell wrapper (see `agents/sdlc-worker.md` for the two binding modes); delete the mentions if none | `tok` |
 
 `<INVARIANTS>` is the one that most repays effort — it is the shared acceptance criterion build
 implements to, verify exercises, and audit reviews for. Be specific and concrete.
@@ -54,8 +56,10 @@ implements to, verify exercises, and audit reviews for. Be specific and concrete
 
 Copy `tools/sdlc.mjs` into your repo (plain Node, no dependencies) and adapt the constants at the
 top — `DEFAULT_BRANCH`, `PROD_BRANCH`, and the worktree naming function. Then wire the lane prompts
-to it: wherever a prompt describes the claim lock, stage swap, or dispatcher gate ritual, have
-workers run the CLI one-shot instead (`node tools/sdlc.mjs claim|advance|gate|maint-lock|lanes|…`).
+to it: wherever a prompt describes the claim lock, outcome emit, stage swap, or dispatcher gate
+ritual, have
+workers run the CLI one-shot instead
+(`node tools/sdlc.mjs claim|emit|advance|gate|cycle-prep|maint-lock|lanes|…`).
 
 Why bother: `advance` validates every transition against the stage graph, which kills the
 hand-typed label-typo class (`stage:verfy`) by construction, and it makes the gate, machine
@@ -72,15 +76,21 @@ gh/git executors injectable, so you can unit-test your adaptations without touch
   GitHub writes, and a per-machine maintenance lock the dispatcher creates automatically at
   `.git/sdlc-maint.lock`. Just confirm your platform allows git worktrees.
 
-Decide whether you want the optional `stage:design` lane (add the label + the shipped
-`prompts/sdlc/design.md` worker) or fold design into intake (shipped default).
+Design is a **standard stage** — every item gets a reviewed implementation plan there (spec-lite
+for small items), so the `stage:design` label and the shipped `prompts/sdlc/design.md` worker are
+part of the default pipeline. What you decide is whether to bind its **UX track**: bind
+`<DESIGN_ARTIFACTS>` in your profile if your work is user-facing and worth storyboarding; leave it
+unbound to run spec-track only.
 
 ## 6. Write your conformance profile
 
 Create `prompts/sdlc/PROFILE.md` from the skeleton in
 [Composability.md](Composability.md#the-conformance-profile), declaring your bindings for the five
 variation points and any known deviations. This is what keeps ad-hoc drift audits against the spec
-cheap. A worked ADO example lives at [profiles/work-ado.example.md](profiles/work-ado.example.md).
+cheap. Two worked examples: [profiles/github-single-repo.example.md](profiles/github-single-repo.example.md)
+(the minimal single-repo GitHub case most forks start from) and
+[profiles/work-ado.example.md](profiles/work-ado.example.md) (a multi-repo Azure DevOps
+read-only consumer).
 
 ## 7. Dry-run manually before scheduling
 
@@ -111,6 +121,13 @@ conflict scan are scripted too and you've observed several clean cycles.
 
 ## 9. Watch the first few cycles
 
-The dispatcher's digest (end of every run) is your dashboard: machine-lock result, git maintenance,
+The dispatcher's digest (end of every run) is your dashboard: cycle duration, machine-lock result,
+git maintenance,
 one line per lane, queue depths, parked items, and **token cost per lane + cycle total**. That token line is the
 trend to watch for cost regressions. Parked (`sdlc:needs-human`) items are your action queue.
+
+**Track which pipeline paths the chain has actually exercised.** A full-chain ADVANCE run proves
+the happy path, but most BOUNCE/PARK/CONTINUE tails start out unproven — keep a short provenance
+list (which issues proved which paths) in your pipeline doc, and exercise an unproven tail
+manually before trusting it scheduled. Fold what those runs teach back into the worker prompts;
+the prompts, not the list, stay canonical for behavior.

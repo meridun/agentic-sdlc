@@ -2,9 +2,9 @@
 
 A portable, project-agnostic **agentic SDLC pipeline**: a set of prompts and agent definitions
 that let a coding agent (Claude Code, or any harness with subagents + a GitHub issue tracker) run
-your backlog through a staged software-delivery pipeline — intake → [design] → queued → build →
-verify → audit → ship (`design` is an optional lane; `queued` is a workerless human throttle) —
-one issue per stage, unattended, on a schedule.
+your backlog through a staged software-delivery pipeline — intake → design → queued → build →
+verify → audit → ship (`design` produces the implementation plan a human reviews at `queued`, the
+workerless human throttle) — one issue per stage, unattended, on a schedule.
 
 It is a **template**, not a framework. There is no runtime to install. You copy the `prompts/` and
 `agents/` trees into a repo, fill in the `<PLACEHOLDERS>`, register one scheduled task, and the
@@ -19,32 +19,33 @@ are baked in; only the project-specific parts are placeholders.
 ## The model in one screen
 
 ```
- intake → [design] → queued → build → verify → audit → ready → shipping → complete
-           optional   HUMAN                            HUMAN    └──── collapses to ────┘
-           module     GATE 1                           GATE 2      the human PR merge
+ intake → design → queued → build → verify → audit → ready → shipping → complete
+          spec     HUMAN                             HUMAN   └──── collapses to ────┘
+          always   GATE 1                            GATE 2     the human PR merge
 ```
 
 That is the **canonical nine-stage spine** ([docs/Composability.md](docs/Composability.md)). Read it
 first so the shipped pipeline never surprises you — everything below is a *simplification* of it, not
 a different model:
 
-- **`[design]` is optional.** It ships with the template but the default pipeline leaves the lane
-  off; enable it for UI-facing work.
+- **`design` is a standard stage.** Its **spec track** always runs: every item gets a reviewed
+  implementation plan in the issue body (spec-lite for small items), which is exactly what the
+  human approves or vetoes at the `queued` gate. Only its **UX/storyboard track** is optional —
+  bind it (`<DESIGN_ARTIFACTS>`) for UI-facing work.
 - **`ready → shipping → complete` collapse.** In a single-repo pipeline the human PR merge *is* the
   `ready` gate, and `shipping → complete` fold into merge-and-close. Multi-repo forks make the tail
   explicit; both forms conform.
 
-So the **template you actually copy** ships six worker prompts — `intake`, the optional `design`,
-`build`, `verify`, `audit`, `ship` — plus the workerless `queued` throttle. Only the tail collapses;
-the default pipeline runs with `design` off (dashed below), switched on for UI-facing work:
+So the **template you actually copy** ships six stage workers — `intake`, `design`, `build`,
+`verify`, `audit`, `ship` — plus the workerless `queued` throttle. Only the tail collapses:
 
 ```
-  ┌─────────┐  ┌ ─ ─ ─ ─ ┐  ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐
-  │ intake  │─▶  [design]  ─▶│ queued │──▶│ build  │──▶│ verify │──▶│ audit  │──▶│  ship  │──▶ (PR merged)
-  └─────────┘  └ ─ ─ ─ ─ ┘  └────────┘   └────────┘   └────────┘   └────────┘   └────────┘
-   triage,      optional      human        cut branch,   full suite   security /   docs fan-out,
-   dedup,       storyboard    throttle     implement,    + real run   invariant    open PR
-   route        (UI work)     (workerless) targeted test              review
+  ┌─────────┐   ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐   ┌────────┐
+  │ intake  │──▶│ design │──▶│ queued │──▶│ build  │──▶│ verify │──▶│ audit  │──▶│  ship  │──▶ (PR merged)
+  └─────────┘   └────────┘   └────────┘   └────────┘   └────────┘   └────────┘   └────────┘
+   triage,       implementation human      execute the   full suite   security /   docs fan-out,
+   dedup,        plan (+ UX     throttle   plan,         + real run   invariant    open PR
+   route         when bound)    (workerless) targeted test            review
 ```
 
 - **Each stage is one prompt** in [`prompts/sdlc/`](prompts/sdlc/). A worker runs exactly one pass
@@ -52,7 +53,8 @@ the default pipeline runs with `design` off (dashed below), switched on for UI-f
 - **The GitHub issue thread is the only shared state.** Workers share no context with each other or
   the dispatcher — everything a downstream stage needs, the upstream stage writes into the issue.
 - **A stage is a label.** `stage:intake` … `stage:ship`. Moving an issue forward = swapping its
-  `stage:` label. `stage:queued` has no worker — it is the human throttle between triage and build.
+  `stage:` label. `stage:queued` has no worker — it is the human throttle between design and
+  build, where a human approves (or vetoes) the implementation plan.
 - **A [dispatcher](prompts/sdlc/dispatch.md)** runs on a schedule (hourly is typical): it does git
   maintenance, then spawns one isolated worker subagent per non-empty lane.
 - **Every worker emits exactly one outcome** — `ADVANCE`, `BOUNCE`, `PARK`, or `CONTINUE` — and
@@ -70,8 +72,7 @@ The full narrative — why each rule exists, the failure modes it prevents — i
 |---|---|
 | [`prompts/sdlc/README.md`](prompts/sdlc/README.md) | The **universal worker loop** — CLAIM → WORK → EMIT → STOP — binding on every lane. Read this first. |
 | [`prompts/sdlc/dispatch.md`](prompts/sdlc/dispatch.md) | The **dispatcher** prompt behind the scheduled task. Concurrent-safe (no singleton): wip reaping (verify-before-write), machine-locked git/worktree maintenance, per-lane fan-out. |
-| [`prompts/sdlc/{intake,build,verify,audit,ship}.md`](prompts/sdlc/) | The five core **stage workers**. Each defines only its own WORK and EMIT specifics. |
-| [`prompts/sdlc/design.md`](prompts/sdlc/design.md) | The **optional design-lane worker** — ships with the template but the default pipeline leaves the lane off; enable it for UI-facing work. |
+| [`prompts/sdlc/{intake,design,build,verify,audit,ship}.md`](prompts/sdlc/) | The six **stage workers**. Each defines only its own WORK and EMIT specifics. |
 | [`tools/sdlc.mjs`](tools/sdlc.mjs) | The **reference CLI** (plain Node, zero deps) — deterministic claim/advance/gate/lock state math so agents supply judgment, not label typing. Optional but recommended. |
 | [`agents/sdlc-worker.md`](agents/sdlc-worker.md) | The **isolated worker agent** definition — deliberately has no delegation tool. Ships in Claude Code (`.claude/agents/`) and GitHub Copilot (`.github/agents/`) frontmatter variants. |
 | [`skills/documentation-tiers/SKILL.md`](skills/documentation-tiers/SKILL.md) | The **docs-tier discipline** the ship stage's docs fan-out routes to — hub-and-spoke L1/L2/L3 tiering, naming, sizing, thematic placement. Optional; copy into your harness's skill dir. |
@@ -79,6 +80,7 @@ The full narrative — why each rule exists, the failure modes it prevents — i
 | [`docs/Adoption.md`](docs/Adoption.md) | Step-by-step: labels to create, placeholders to fill, the scheduled task to register. |
 | [`docs/Labels.md`](docs/Labels.md) | The `stage:*` / `sdlc:*` / `priority:*` label taxonomy, with a `gh` script to create them. |
 | [`docs/Composability.md`](docs/Composability.md) | **One spec, many forks** — the 9-stage canonical spine, the five variation points (tracker, topology, modules, dispatcher, quality bars), and the per-fork conformance profile. |
+| [`docs/profiles/github-single-repo.example.md`](docs/profiles/github-single-repo.example.md) | A **worked conformance profile** — the minimal single-repo GitHub fork with the reference CLI (the shape most forks start from). |
 | [`docs/profiles/work-ado.example.md`](docs/profiles/work-ado.example.md) | A **worked conformance profile** — a multi-repo Azure DevOps fork declared against the spec. |
 
 ---
@@ -110,13 +112,16 @@ worker at a time; a global lock aborts the run if any worker is live) is documen
 [docs/AgenticSDLC.md](docs/AgenticSDLC.md#concurrency-variants). Start serial if your backlog is
 small; move to per-issue when throughput matters.
 
-## Optional: a design lane
+## The design stage: spec always, UX when bound
 
-UI/UX-heavy projects benefit from a `stage:design` lane between intake and queued (storyboard the
-change before building it). CLI/library/backend projects fold that into intake as a decision debate.
-[docs/AgenticSDLC.md](docs/AgenticSDLC.md#optional-design-lane) shows both. The worker prompt ships
-([prompts/sdlc/design.md](prompts/sdlc/design.md)) but the default pipeline leaves the lane off —
-enable it (label + lane) if your work is player-/user-facing.
+Every triaged item passes through `stage:design` for an **implementation plan** written into the
+issue body — the artifact the human reviews at the `queued` gate (spec-lite for small items, so a
+bug fix costs a few lines, not a ceremony). UI/UX-heavy projects additionally bind the **UX
+track** (`<DESIGN_ARTIFACTS>`): competing storyboards, a human A/B/C pick parked in-phase, then
+the spec. CLI/library/backend projects leave it unbound and keep product/scope questions at intake
+as decision debates. [docs/AgenticSDLC.md](docs/AgenticSDLC.md#the-design-stage--standard-with-two-tracks)
+shows both tracks; the worker prompt is
+[prompts/sdlc/design.md](prompts/sdlc/design.md).
 
 ---
 

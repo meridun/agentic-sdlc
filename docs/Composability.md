@@ -44,21 +44,26 @@ run with an agent.
 ## The canonical lifecycle spine
 
 The nine-stage Feature state machine is the universal spine. It supersedes the earlier six-stage
-form (`intake → queued → build → verify → audit → ship`); `ship` is decomposed into the explicit
-tail `ready → shipping → complete` so the second human gate is first-class.
+form (`intake → queued → build → verify → audit → ship`): `ship` is decomposed into the explicit
+tail `ready → shipping → complete` so the second human gate is first-class, and `design` is a
+**standard stage** — its spec track (a reviewed implementation plan on the work item, spec-lite
+for small items) always runs, so every item reaches the `queued` gate carrying an approach the
+human can approve or veto. Only design's UX/artifact track is optional (VP3).
 
 ```
-intake → [design] → queued → build → verify → audit → ready → shipping → complete
-          optional   HUMAN                             HUMAN
-          module     GATE 1                            GATE 2
+intake → design → queued → build → verify → audit → ready → shipping → complete
+         spec      HUMAN                            HUMAN
+         always    GATE 1                           GATE 2
 ```
 
 Core semantics every fork keeps:
 
-- **Two human gates.** `queued` (a human commits engineering capacity) and `ready` (a human
+- **Two human gates.** `queued` (a human reviews design's implementation plan and commits
+  engineering capacity) and `ready` (a human
   approves release). Both are workerless; automation never advances through them.
 - **Evidence-based transitions.** Each stage records its artifact on the work item before the item
-  moves (intake's routing, build's branch+plan, verify's report, audit's findings). A downstream
+  moves (intake's requirements + AC, design's implementation plan, build's branch, verify's
+  report, audit's findings). A downstream
   stage reconstructs its full context from the work item alone.
 - **The five invariants** of [AgenticSDLC.md](AgenticSDLC.md) — one item/one outcome per pass,
   idempotency, isolation (no delegation, no shared tree), stale-lock reaping never live-lock
@@ -86,7 +91,7 @@ The spec's state machine needs, from any tracker, exactly these operations:
 | claim lock + timestamp | `sdlc:wip` + claim comment | lock field (rev-CAS, preferred) or `sdlc:wip` tag + claim comment |
 | park to human | `sdlc:needs-human` | `sdlc:needs-human` **on the Feature**, HUMAN ACTION REQUIRED discussion comment |
 | human keep-off | `sdlc:hold` | `sdlc:hold` |
-| evidence record | issue comment | child PBI evidence fields / comments |
+| evidence record | issue **body sections** for durable artifacts (`## Requirements` / `## Acceptance criteria` / `## Design` / `## Implementation plan`, one owner per section) + comments for protocol traffic | child PBI evidence fields / comments |
 | hierarchy & ordering | n/a (flat issues) | ADO Parent link (membership), predecessor/successor links (provider→consumer order) |
 | tag mutation safety | `gh` label ops | **all tag ops via `sdlc.ps1`** — raw ADO CLI replaces rather than appends |
 | status dashboard *(optional cache)* | — (labels + thread suffice) | description status block, dispatcher-rewritten from evidence |
@@ -131,11 +136,15 @@ The multi-repo model is the general case; single-repo is its degenerate form.
 
 ### VP3 — Lifecycle modules (optional, on top of the spine)
 
-- **Design lane** (`stage:design`, between intake and queued) — mandatory *iff the project/repo is
-  UI-facing*. Material web changes require version-controlled storyboards + human
-  design-approve/design-reject, recorded as child design evidence; design approval is distinct
-  from and does not replace the `queued` gate. Non-UI forks fold design questions into intake as
-  decision debates (shipped default).
+- **Design UX track** — the design *stage* itself is spine, not a module: its spec track always
+  runs, and every item reaches `queued` carrying a reviewed implementation plan. What varies is
+  the **UX/artifact track**: a fork whose work is user-facing binds `<DESIGN_ARTIFACTS>` in its
+  profile (its conventions for storyboards/mockups — what "what it looks like / how it behaves"
+  is recorded in). Material UI changes then require version-controlled design artifacts + a human
+  A/B/C pick (a PARK inside the design phase, recorded as design evidence) before the spec is
+  written; design approval is distinct from and does not replace the `queued` gate. Forks without
+  UI work leave the binding empty — every item takes the spec track only (spec-lite for exempt
+  items), and product/scope questions still run as intake decision debates.
 - **PSI lane** (production-support investigation) — a customization, not core. Its own machine
   (`reported → triage → diagnosed → decided → pending-fix → resolved`); the automated PSI worker is
   **read-only** (documents severity/repro/evidence/root-cause, never writes code); at `decided` a
@@ -143,15 +152,22 @@ The multi-repo model is the general case; single-repo is its degenerate form.
   attaches to a normal Feature and rides the spine from there. No automation bypass for any
   priority. Forks without production support omit the lane entirely.
 - Future modules follow the same shape: a named sub-machine that *enters* the spine at a defined
-  point (PSI enters at intake; design inserts before queued) and never adds a third human gate to
-  the spine itself.
+  point (PSI enters at intake; the design UX track binds inside the design stage) and never adds a
+  third human gate to the spine itself. (The UX track's PARK is a worker parking for a missing
+  input, not a new gate.)
 
 ### VP4 — Dispatcher runtime
 
 The dispatcher contract is runtime-agnostic: a concurrency model of per-issue claims + idempotent
 verify-before-write tracker writes + a per-machine maintenance lock (no dispatcher singleton),
 stale-lock reaping (2h heuristic, verify-before-write), git/PR maintenance, per-lane fan-out of
-isolated workers, end-of-cycle digest. Bindings in the wild:
+isolated workers, end-of-cycle digest. The reference maintenance-lock binding is a lock
+**directory** at `.git/sdlc-maint.lock`: atomic-`mkdir` acquire (exactly one contender succeeds),
+an `owner.txt` stamp (`<run-id> <ISO timestamp>`), and a 30-minute stale reap by atomic
+**rename** (exactly one contender wins the reap). One gotcha rides the representation: because
+acquisition is a `mkdir` under `.git/`, the lock cannot be taken from inside a git worktree
+(there `.git` is a file, not a directory) — maintenance runs only from the main checkout.
+Bindings in the wild:
 
 - **Claude Code** — scheduled task → `dispatch.md` → one worker subagent per non-empty lane
   (IsekaiOnline, vtk, pemr).
@@ -179,15 +195,23 @@ to both repos can diff a profile against this spec mechanically.
 
 ```markdown
 # SDLC conformance profile: <project>
-- Spine: intake → [design?] → queued → build → verify → audit → ready → shipping → complete
+- Spine: intake → design → queued → build → verify → audit → ready → shipping → complete
+  (or the collapsed tail)
 - VP1 tracker: <GitHub labels | ADO tags+links> — binding table or link
 - VP2 topology: <single-repo | multi-repo Feature/child> — routing tags if multi
-- VP3 modules: design lane <on/off + trigger>, PSI lane <on/off>, others
+- VP3 modules: design UX track <off | bound: `<DESIGN_ARTIFACTS>` conventions + trigger>,
+  PSI lane <on/off>, others
 - VP4 dispatcher: <trigger, maintenance-lock representation, worker isolation>
-- VP5 quality bars: per repo — test / full-suite / smoke / lint / invariants / docs sinks
+- VP5 quality bars: per repo — test / full-suite / smoke / lint / invariants / known env limits /
+  docs sinks
 - Deterministic core: <none | tools/sdlc.mjs | sdlc.ps1 | sdlc CLI> and which rituals it owns
 - Known deviations from spec: <list, with why>
 ```
+
+Worked examples: [profiles/work-ado.example.md](profiles/work-ado.example.md) (multi-repo Azure
+DevOps, read-only consumer) and
+[profiles/github-single-repo.example.md](profiles/github-single-repo.example.md) (the minimal
+single-repo GitHub case with the reference CLI).
 
 The "known deviations" line is load-bearing: fork-per-project means divergence is legitimate, but
 *undeclared* divergence is drift. An audit pass = read profile, read spec, list deltas, file

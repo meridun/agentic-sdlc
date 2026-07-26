@@ -27,7 +27,10 @@ to **ADVANCE**. New commits invalidate a prior report — re-audit. Otherwise:
   against `origin/<DEFAULT_BRANCH>` (fetch first — the diff must be against current
   `<DEFAULT_BRANCH>`, not a stale local copy). Read-only lane: audit never merges; if the branch no
   longer merges cleanly, **BOUNCE → build** naming the conflicting paths. Review the **diff**, not the
-  whole repo, with build's plan comment as the spec.
+  whole repo, with the issue body's `## Implementation plan` as the spec. The branch is **not** a
+  frozen build artifact: verify may have committed to it too (a spec/test fix within its remit),
+  and those commits are in the diff you're reviewing — audit them like any other change; don't
+  wave a commit through because verify authored it.
   - **No-branch fallback** (built outside the pipeline, already merged): reconstruct the diff from the
     introducing commits verify named (`git log -S`/`--grep`), scoped to the issue's files, so you audit
     the *change* and not the whole repo. Note in the report that you reviewed the isolated diff on
@@ -42,6 +45,9 @@ to **ADVANCE**. New commits invalidate a prior report — re-audit. Otherwise:
   - **Invariant + pattern compliance** — every one of `<INVARIANTS>` preserved on every new code path;
     the project's layering/placement rules honored; no secrets, tokens, or personal paths in committed
     fixtures or test data.
+- If your project names a dedicated review tool or skill for this pass and the harness lacks it
+  (headless/cron runs may), the checklist above applied to the diff is sufficient — never PARK
+  over a missing tool.
 - Rank findings: **blocking** (must fix before ship) vs **advisory** (note, don't block).
 
 ### 3. EMIT exactly one outcome
