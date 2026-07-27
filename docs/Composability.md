@@ -86,12 +86,12 @@ The spec's state machine needs, from any tracker, exactly these operations:
 
 | Abstract operation | GitHub binding (template) | ADO binding (work) |
 |---|---|---|
-| stage marker (exactly one) | `stage:*` label | phase tag / state field |
+| stage marker (exactly one) | `stage:*` label | `stage:*` tag on the Feature (native States stay coarse/derived) |
 | routing marker | repo labels / single repo | exactly one `repo:*` tag per child |
-| claim lock + timestamp | `sdlc:wip` + claim comment | lock field (rev-CAS, preferred) or `sdlc:wip` tag + claim comment |
+| claim lock + timestamp | `sdlc:wip` + claim comment | stage-Task claim line written by rev-CAS + transient `sdlc:wip` visibility tag |
 | park to human | `sdlc:needs-human` | `sdlc:needs-human` **on the Feature**, HUMAN ACTION REQUIRED discussion comment |
 | human keep-off | `sdlc:hold` | `sdlc:hold` |
-| evidence record | issue **body sections** for durable artifacts (`## Requirements` / `## Acceptance criteria` / `## Design` / `## Implementation plan`, one owner per section) + comments for protocol traffic | child PBI evidence fields / comments |
+| evidence record | issue **body sections** for durable artifacts (`## Requirements` / `## Acceptance criteria` / `## Design` / `## Implementation plan`, one owner per section) + comments for protocol traffic | split by level: Feature comments (team-facing traffic), PBI description (tech spec/plan), stage Tasks (agent working memory) |
 | hierarchy & ordering | n/a (flat issues) | ADO Parent link (membership), predecessor/successor links (provider→consumer order) |
 | tag mutation safety | `gh` label ops | **all tag ops via `sdlc.ps1`** — raw ADO CLI replaces rather than appends |
 | status dashboard *(optional cache)* | — (labels + thread suffice) | description status block, dispatcher-rewritten from evidence |
@@ -103,9 +103,9 @@ dialect. The abstract operation names are the shared vocabulary for cross-fork c
 
 1. **Deterministic contention resolution** — either an *append-only, server-timestamped* record
    (GitHub claim comments; requires the claim-verify + boundary ritual of
-   `prompts/sdlc/README.md`), or a *compare-and-swap* write (e.g. an ADO field PATCH tested
-   against `System.Rev`), which serializes claims at the tracker and collapses the claim-verify
-   ritual entirely.
+   `prompts/sdlc/README.md`), or a *compare-and-swap* write (e.g. an ADO PATCH tested against
+   `System.Rev` — on a field or on a child Task's description), which serializes claims at the
+   tracker and collapses the claim-verify ritual entirely.
 2. **Provable age and owner from server-side data** — a comment timestamp, a field revision, or a
    timeline event. A worker-authored string alone proves nothing, and a whole-item modified stamp
    (`updatedAt` / `ChangedDate`) is refreshed by any edit. A lock whose age cannot be proven is
