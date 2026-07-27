@@ -12,6 +12,13 @@ run.
 This file is the canonical, reviewable copy; the scheduled task is a thin pointer that reads it and
 executes one pass.
 
+> **Session orchestration layers.** If the session carries a user-level orchestration policy (e.g.
+> pilotfish's `## Orchestration` block in `~/.claude/CLAUDE.md`), this prompt's topology and model
+> routing override it for the dispatch cycle: no discovery/plan/approval phases, no role-agent
+> substitution, no "mechanical default" dispatch — the fan-out below is the whole topology. This is
+> the specific-over-general precedence such layers themselves document. Workers are immune by
+> construction (`<WORKER_AGENT>` has no delegation tool).
+
 > **Serial variant.** For a simpler single-worker pipeline, replace Step -1 + Step 0 with a global
 > gate — *any* `sdlc:wip` younger than 2h aborts the whole run; else reap and proceed — and run
 > lanes one at a time in pipeline order. See `docs/AgenticSDLC.md`. The per-issue version below is
@@ -226,6 +233,12 @@ the human throttle):
    | audit | high (opus-class) | security judgment — deliberately never downsized |
    | ship | mid (sonnet-class) | docs fan-out + PR ritual; template-shaped work |
 
+   Two routing cautions: **set concrete tiers, not provider aliases** — a family alias like `opus`
+   resolves provider/account/settings-dependently, so what it names can shift under you; and
+   **avoid Fable-class models for the audit lane** — their safety classifiers can refuse benign
+   defensive-security review work, which is exactly audit's job (same reason session-orchestration
+   layers keep security roles off Fable).
+
    Escalate a lane one tier only after its worker BOUNCEs the same issue twice for
    capability-shaped reasons (not genuinely-broken code). Prompt (substitute the lane, run-id, and
    candidate list): "You are an autonomous SDLC pipeline worker for the `<PROJECT>` project.
@@ -239,7 +252,12 @@ the human throttle):
    candidate list from the same Step 0 snapshot as step 1 (the lane's eligible items only, all
    three fields per item); a fresh per-lane re-query happens only in the step-1 ADVANCE case.
 3. **Concurrency:** lane workers claim per-issue and work in issue-scoped worktrees, so they may run
-   concurrently — spawn all non-empty lanes' workers in one batch and wait for all. Exception: run
+   concurrently — spawn all non-empty lanes' workers in one batch and wait for all. Spawn each
+   worker **in the background** (Claude Code: `run_in_background: true`), then collect results: a
+   foreground-spawned agent that hits its timeout gets its promoted child processes killed seconds
+   after it returns — a worker mid-test-suite or mid-push would be cut off. Each worker's final
+   message is its deliverable; pull it when the batch completes — never re-spawn a finished worker
+   to "resend" a result. Exception: run
    intake before the batch when its merge sweep has pending merges to process — check the sweep
    state **read-only** (the `cycle-prep` report's `=== sweep ===` section, or
    `node tools/sdlc.mjs sweep`): anything other than `sweep: clear` means pending, and peeking

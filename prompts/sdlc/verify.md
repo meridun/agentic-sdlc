@@ -67,6 +67,8 @@ written) → skip to **ADVANCE**. New commits invalidate a prior report — re-v
 - **BOUNCE → `stage:build`** — any test red, any AC unmet, any invariant violated, or a regression.
   Swap `stage:verify` → `stage:build`, remove `sdlc:wip`, comment the **specific** failure (test name
   + output, or the AC with observed-vs-expected). Build fixes on the same branch (idempotent continue).
+  Apply the README **bounce cap**: two prior verify→build bounces on this issue for the same failure
+  class → PARK with the loop history instead of a third bounce.
   **Verify validates; it does not fix** — don't patch the code yourself.
 - **PARK** — needs a human call: the environment won't stand up, a nondeterministic/flaky failure
   needs judgment, the AC's expected behavior is genuinely ambiguous, or the change **meets the AC but

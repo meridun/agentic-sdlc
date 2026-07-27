@@ -179,6 +179,19 @@ A fork must state its binding for: how the cycle is triggered, how machine-local
 serialized (the per-machine lock's representation), and how workers are isolated (worktrees,
 separate clones, or serial-variant tree hygiene).
 
+**Coexistence with session-orchestration layers.** A machine running the dispatcher may also carry
+a user-level interactive-orchestration policy (e.g. [pilotfish](https://github.com/Nanako0129/pilotfish),
+which installs role agents and a delegation policy under `~/.claude/`). The two are orthogonal and
+compose by scope: the orchestration layer governs *interactive* sessions; the SDLC pipeline governs
+its own scheduled cycle, and `dispatch.md` declares that its fixed topology overrides any
+session-level delegation policy for the cycle (the specific-over-general precedence such layers
+themselves document). Two conventions deliberately differ and should not be "harmonized": role-agent
+layers pin the model in each agent's frontmatter and tell the orchestrator to *omit* the model
+argument when invoking a named role, while this pipeline uses **one** worker agent for every lane
+and therefore *always sets* the model per spawn (the lane tier table) — each is correct for its
+shape. Workers themselves are unaffected by construction: `<WORKER_AGENT>` has no delegation tool,
+so no session policy can make it spawn anything.
+
 ### VP5 — Quality bars
 
 `<TEST_CMD>`, `<FULL_SUITE_CMD>`, `<SMOKE_CMD>`, `<LINT_CMD>`, `<INVARIANTS>`, `<DOCS_SINKS>` are
