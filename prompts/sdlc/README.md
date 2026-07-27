@@ -129,6 +129,14 @@ comfortably.
 3. **EMIT exactly one outcome** — ADVANCE, BOUNCE, or PARK (build also defines CONTINUE, intake
    CLOSE) — never silent. **Every outcome removes `sdlc:wip`** on the way out.
 
+   **Bounce cap (bounded loops).** Before EMITting a BOUNCE, check the issue's comments for this
+   lane's prior `sdlc:emit … BOUNCE` markers to the same target lane for the same class of failure.
+   Two already there → PARK instead (`sdlc:needs-human`), summarizing the loop history (each
+   bounce's reason and what the fixing lane did) so the human sees why it isn't converging. Two
+   full round-trips that didn't converge won't converge on the third automated attempt. A bounce
+   for a *different* failure class (e.g. earlier bounces were red tests, this one is a merge
+   conflict) starts its own count.
+
    **CLI-first:** when the reference CLI is present, the outcome is one command —
 
    ```

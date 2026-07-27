@@ -67,7 +67,12 @@ merge-and-close. Multi-repo forks make the tail explicit; both forms conform.
    blocked by a dependency is a **readiness regression**, not a build failure: flip the item's
    `ready` label to `blocked` and bounce it to `stage:queued`, so the human throttle gates
    re-entry when the blocker clears — that gate is what stops a silent queued→build→queued loop.
-   Failures flow to accountability, not in a circle.
+   Failures flow to accountability, not in a circle. **And every bounce loop is bounded:** if the
+   same issue has already been bounced **twice** between the same two lanes for the same class of
+   failure (count the lane's prior `sdlc:emit … BOUNCE` comments on the issue), the third pass
+   PARKs it `sdlc:needs-human` with the loop history instead of bouncing again — a ping-pong that
+   two full round-trips didn't converge needs a human, not a third automated attempt. (This is the
+   inter-worker mirror of the dispatcher's resume-once-then-park self-heal.)
 
 ## The label protocol
 

@@ -11,7 +11,19 @@ How to wire this template into a real repo. ~30 minutes for a first pass.
   - GitHub Copilot: `.github/agents/<WORKER_AGENT>.agent.md`
 
 Name the agent something project-scoped (e.g. `acme-sdlc-worker`) and use that everywhere `<WORKER_AGENT>`
-appears.
+appears. Avoid names already claimed by session-orchestration layers installed at the user level —
+e.g. pilotfish registers `scout`, `Explore`, `plan-verifier`, `security-reviewer`, `mech-executor`,
+`executor`, `verifier`, `security-executor` — a collision would silently swap in the wrong agent
+body. A project-scoped name sidesteps the whole class.
+
+Two Claude Code notes:
+
+- **Version floor.** The worker's no-delegation guarantee rests on the harness *enforcing* the
+  agent file's tool list, not on prompt text. Enforced tool exclusion is reliable on Claude Code
+  ≥ 2.1.219 — treat that as the floor for scheduled operation.
+- **`CLAUDE_CODE_SUBAGENT_MODEL`** silently overrides per-spawn model arguments; if it's set on the
+  dispatch machine, the per-lane tier table in `dispatch.md` is a no-op. Unset it for the
+  dispatcher's environment.
 
 - *(optional)* `skills/documentation-tiers/` → your harness's skill dir (Claude Code:
   `.claude/skills/documentation-tiers/`). Copy it if the ship stage's docs fan-out should follow the
@@ -104,7 +116,12 @@ scheduled one will work. Walk one issue all the way through intake → ship this
 Register a recurring task whose body is a **thin pointer** to `dispatch.md`, e.g.:
 
 > Read `<REPO_PATH>/prompts/sdlc/dispatch.md` and execute one dispatch cycle for the `<PROJECT>`
-> project. The file is the canonical prompt; follow it exactly.
+> project: spawn one `<WORKER_AGENT>` subagent per non-empty lane as the file directs. The file is
+> the canonical prompt; follow it exactly.
+
+Keep the delegation cue ("spawn one `<WORKER_AGENT>` subagent per …") in the pointer itself:
+harness versions have been observed declining to spawn subagents from prompts that carry no
+explicit delegation instruction, and the pointer is the first text the scheduled session sees.
 
 Cadence: hourly is typical (the 2h reap threshold assumes ≤ hourly). Options:
 - **Claude Code scheduled tasks** — the native path; the task calls the dispatcher subagent.
