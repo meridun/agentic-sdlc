@@ -43,7 +43,11 @@ merge-and-close. Multi-repo forks make the tail explicit; both forms conform.
    the investigation itself finds something significant; then redo exactly the invalidated part, and
    only it. If the evidence shows the work is already fully shipped, any stage may short-circuit:
    PARK with the evidence (PR#, commit, observed behavior) for a human to close — no silent
-   auto-close, and no pointless ratchet through the remaining lanes.
+   auto-close, and no pointless ratchet through the remaining lanes. Reality includes work the
+   pipeline never produced — a reasonably-named branch on local or origin, work already partly
+   merged, artifacts on a predecessor issue linked in the body — so enrolled, cloned, and rewound
+   items all reconcile the same way; a branch on neither local nor origin, or unrecognizably
+   named, is not discoverable.
 
 3. **Isolation — no delegation, no shared tree.** Workers have no agent-spawning tool (a spawned
    subagent runs detached and strands the item). They never work in the main checkout — each uses an
