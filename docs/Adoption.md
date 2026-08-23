@@ -49,7 +49,7 @@ Grep for `<` across `prompts/` and `agents/` and replace every one. The full lis
 | `<BUILD_CMD>` | Build/compile/launch the software for a real run | `npm run build` |
 | `<TEST_CMD>` | Targeted test run (build stage) | `npm test -- <path>` |
 | `<FULL_SUITE_CMD>` | Full test suite (verify stage) | `npm test` |
-| `<LINT_CMD>` | Lint/format/type gate that must be clean before commit | `npm run lint` |
+| `<LINT_CMD>` | Lint/format/type gate that must be clean before commit. On a repo with an existing lint backlog bind it to the **ratchet** (`node tools/check-lint-baseline.mjs`, §4a) — then "clean" means *no growth vs the committed per-rule baseline, and touched files clean on their own* | `npm run lint` · `npm run lint:baseline` |
 | `<SMOKE_CMD>` | Repeatable real-run / e2e / smoke spec (verify stage) | `npm run e2e` |
 | `<LANG_CONVENTIONS>` | The lint/format/test bar in one line | `eslint clean, prettier applied, jest green` |
 | `<INVARIANTS>` | Project rules that are ACs on **every** change — list them | `no breaking API changes; all endpoints authz-checked; no PII in logs` |
@@ -78,6 +78,35 @@ hand-typed label-typo class (`stage:verfy`) by construction, and it makes the ga
 maintenance lock, and claim-verify race check deterministic — the agent supplies judgment (what to
 spawn, what to write in comments), the CLI supplies the state math. The pure helpers are exported and the
 gh/git executors injectable, so you can unit-test your adaptations without touching GitHub.
+
+### 4a. Lint ratchet for repos with a backlog (optional)
+
+A lane gate of "`<LINT_CMD>` clean" is unenforceable when `<DEFAULT_BRANCH>` is already red: a
+worker can't tell its own breakage from inherited errors, so the gate is either ignored or blocks
+everything. `tools/check-lint-baseline.mjs` is a per-rule-id **ratchet**: it grandfathers the
+current ESLint error counts in a committed `tools/lint-baseline.json` and fails only on growth —
+counts may hold or shrink, never grow — and a rule id absent from the baseline (a new error
+class) also fails. It resolves `eslint` from *your* repo (a devDependency there; the script
+itself has no dependencies) and runs through the ESLint Node API with `cache: false`, so a stale
+`.eslintcache` can't produce phantom counts on one host and not another.
+
+1. Copy `tools/check-lint-baseline.mjs` alongside `tools/sdlc.mjs`; add
+   `"lint:baseline": "node tools/check-lint-baseline.mjs"` to `package.json` scripts.
+2. From a clean, fully installed checkout of `<DEFAULT_BRANCH>`, seed the baseline:
+   `npm run lint:baseline -- --update` and commit `tools/lint-baseline.json`.
+3. Add a CI step on every PR (deterministic across hosts — `npm ci` first):
+   ```yaml
+   - name: Lint ratchet — ESLint error counts must not grow
+     run: npm run lint:baseline
+   ```
+4. Bind `<LINT_CMD>` to `npm run lint:baseline` in the prompts and your profile's VP5 line.
+   Build and verify then gate on **ratchet passes + touched files clean** (`npx eslint <files>`);
+   `npm run lint` stays the interactive/human command and is expected to be red until the
+   backlog burns down. Burn it down opportunistically in files you touch, then lock in the lower
+   counts with `--update` (a re-baseline that *raises* a count is a review flag, not a fix).
+
+Non-ESLint stacks: the pure helpers (`aggregateCounts` / `compareToBaseline` / `reportCheck`)
+are generic — swap `lintRepo` for your linter's JSON output and keep the same baseline shape.
 
 ## 5. Choose your variant
 

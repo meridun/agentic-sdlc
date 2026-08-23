@@ -31,7 +31,9 @@ the project name is genericized to `acme`. Bindings per [Composability.md](../Co
   issue-scoped worktrees at `../acme-wt/<issue#>`. Workers end replies with the fenced JSON result
   block (README STOP contract) the dispatcher consumes.
 - **VP5 quality bars:** targeted `npm run test:file <path>` · full suite `npm test` · smoke/e2e
-  `npm run e2e` · lint `npm run lint` · invariants: multi-actor safety (never assume single-user
+  `npm run e2e` · lint gate `npm run lint:baseline` (ratchet — no new ESLint errors vs
+  `tools/lint-baseline.json`, touched files clean; `npm run lint` is the interactive/human
+  command) · invariants: multi-actor safety (never assume single-user
   state), defensive at boundaries (guard `undefined`, especially DB results), data access only in
   the repository layer · known env limits: none declared · docs sinks: `README.md` + the `docs/`
   tree.

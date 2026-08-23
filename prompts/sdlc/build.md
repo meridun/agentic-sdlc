@@ -60,8 +60,11 @@ Decide the sub-case first (idempotency — schedulers fire on a clock, not on ne
     not this branch). Reuse and extend existing code, don't fork parallel logic, guard boundaries
     (esp. undefined / external results), never assume single-user state. Don't touch unrelated files.
   - **Write/update tests for everything changed** and run them targeted yourself (`<TEST_CMD>`) until
-    green, diagnosing failures. Run the linter/formatter (`<LINT_CMD>`) clean. Do **not** run the full
-    suite here — that's verify's job.
+    green, diagnosing failures. Run the lint gate (`<LINT_CMD>`) clean — where the project binds
+    it to the **ratchet** (`node tools/check-lint-baseline.mjs`: no new lint errors vs the
+    committed per-rule baseline), the files you touched must *also* lint clean on their own
+    (`npx eslint <files>`); the inherited backlog is grandfathered, growth is not. Do **not** run
+    the full suite here — that's verify's job.
   - **Invariant check before advancing:** does the change preserve every one of `<INVARIANTS>`? If the
     AC itself conflicts with an invariant, that's a BOUNCE to intake (decision needed), not a silent
     violation.
@@ -73,7 +76,8 @@ Decide the sub-case first (idempotency — schedulers fire on a clock, not on ne
 **Bounce to the lane that owns the failure — not reflexively to design.** The decided design is
 usually sound; most build failures are implementation or readiness, not "the design was wrong."
 
-- **ADVANCE** — branch pushed, complete to the AC and the plan, targeted tests + lint green. Swap
+- **ADVANCE** — branch pushed, complete to the AC and the plan, targeted tests + lint gate green
+  (ratchet passes + touched files clean, where bound). Swap
   `stage:build` → `stage:verify`, remove `sdlc:wip`. Comment: the **branch name**, what was
   implemented (noting any deviation from the reviewed plan and why, plus any small spec gaps you
   filled), which tests pass, and what verify should aim its real-run / integration pass at.

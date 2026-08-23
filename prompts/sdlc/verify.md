@@ -33,8 +33,9 @@ written) → skip to **ADVANCE**. New commits invalidate a prior report — re-v
     issue names) and name them in your report so audit can isolate the same diff. Any new test then
     has no branch home — flag it for ship.
 - **Run the full suite yourself** — `<FULL_SUITE_CMD>` (not just the targeted files build ran; the
-  point here is to catch regressions build's narrow run couldn't see), plus `<LINT_CMD>` and any
-  project-mandated extra gate (race detector, type-check, integration pass) — everything `<INVARIANTS>`
+  point here is to catch regressions build's narrow run couldn't see), plus `<LINT_CMD>` (where
+  bound to the ratchet: `node tools/check-lint-baseline.mjs` passes **and** the branch's touched
+  files lint clean via `npx eslint <files>`) and any project-mandated extra gate (race detector, type-check, integration pass) — everything `<INVARIANTS>`
   and `<LANG_CONVENTIONS>` require. Diagnose failures rather than papering over them.
 - **Known environment limitations — honor them, don't re-derive them.** If the project's profile
   declares `<KNOWN_ENV_LIMITS>` (a gate that cannot run in this environment, its accepted
