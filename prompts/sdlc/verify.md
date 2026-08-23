@@ -55,6 +55,19 @@ written) → skip to **ADVANCE**. New commits invalidate a prior report — re-v
     (e.g. a server-side rejection only a unit test can force). Note any AC whose behavior is
     environment-dependent as unverified-on-<other-env> rather than skipping silently.
   - If the environment genuinely cannot stand up, **PARK** — never ADVANCE on unit tests alone.
+- **Migration validation — mandatory when the diff touches `<MIGRATIONS_DIR>`** (skip the whole
+  bullet if the profile leaves `<MIGRATIONS_DIR>` unbound):
+  - **Fresh apply:** the migrations must apply cleanly to an empty database. If the `<SMOKE_CMD>`
+    harness stands up a fresh DB and migrates on startup, a green smoke run covers it; a standup
+    failure in the migrate step is a BOUNCE → build, not an environment PARK.
+  - **Rollback validity:** each new migration's down-block must actually work — run
+    `<MIGRATE_DOWN_CMD>` for the new migration(s) then `<MIGRATE_UP_CMD>` again (inside the
+    smoke harness's DB or any disposable DB, never a shared one). An empty or broken down-block
+    is a BOUNCE.
+  - **Schema drift:** `<SCHEMA_DUMP>` must be regenerated and committed in the same diff — after
+    applying, confirm `git status` shows no uncommitted change to it. A committed dump that
+    doesn't match the migration chain is a BOUNCE (the branch must carry the regenerated file,
+    not a hand-edit).
 - **Check the diff against the issue body's `## Implementation plan`** — the reviewed plan is the
   spec; an unexplained deviation (files touched outside the plan with no ADVANCE-comment
   rationale) is a BOUNCE.

@@ -216,7 +216,8 @@ to both repos can diff a profile against this spec mechanically.
   PSI lane <on/off>, others
 - VP4 dispatcher: <trigger, maintenance-lock representation, worker isolation>
 - VP5 quality bars: per repo — test / full-suite / smoke / lint / invariants / known env limits /
-  docs sinks
+  docs sinks / dep-audit cmd / migrations dir + down/up cmds + schema dump (optional knobs;
+  unbound = the lane step is skipped)
 - Deterministic core: <none | tools/sdlc.mjs | sdlc.ps1 | sdlc CLI> and which rituals it owns
 - Known deviations from spec: <list, with why>
 ```

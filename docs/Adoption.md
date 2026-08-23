@@ -57,6 +57,10 @@ Grep for `<` across `prompts/` and `agents/` and replace every one. The full lis
 | `<DESIGN_ARTIFACTS>` | *(optional, design UX track)* the fork's conventions for design artifacts — what storyboards/mockups are, where they live, how they're authored; leave unbound to run spec-track only | `docs/mockups/ per its README` |
 | `<KNOWN_ENV_LIMITS>` | *(optional, verify)* declared environment limitations: the gate that can't run, its accepted substitute, and the report wording — so verify honors them instead of rediscovering (or PARKing over) them each pass | `integration suite needs local MySQL — covered via Docker e2e` |
 | `<DOCS_SINKS>` | Documentation targets ship fans out to | `README.md, docs/API.md` |
+| `<DEP_AUDIT_CMD>` | *(optional)* dependency-vulnerability scanner; binds intake's per-pass sweep (one batch issue, never a per-issue gate) and audit's lockfile-diff check. Unbound → both steps are skipped | `npm audit --json` · `pip-audit` · `cargo audit` |
+| `<MIGRATIONS_DIR>` | *(optional)* schema-migrations directory; when a diff touches it, verify runs the migration checks and audit checks the diff shape. Unbound → skipped | `db/migrations/` |
+| `<MIGRATE_DOWN_CMD>` / `<MIGRATE_UP_CMD>` | *(optional, with `<MIGRATIONS_DIR>`)* roll the newest migration(s) back / forward against a disposable DB | `dbmate down` / `dbmate up` · `alembic downgrade -1` / `alembic upgrade head` |
+| `<SCHEMA_DUMP>` | *(optional, with `<MIGRATIONS_DIR>`)* the committed schema dump the migration tool regenerates; must travel in the same diff as the migration | `db/schema.sql` |
 | `<DOCS_ROOT>` | *(optional, docs-tiers skill)* root of the L3 documentation tree | `docs/` |
 | `<DOC_DOMAINS>` | *(optional, docs-tiers skill)* thematic domain prefixes files route into | `Architecture_*, Testing_*, UserGuide_*` |
 | `<TOKEN_TOOL>` | *(optional)* shell-output compactor — either an explicit prefix on every command, or a transparent shell wrapper (see `agents/sdlc-worker.md` for the two binding modes); delete the mentions if none | `tok` |

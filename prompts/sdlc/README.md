@@ -27,7 +27,11 @@ comfortably.
 > (release branch, off-limits to workers), `<WORKTREE_ROOT>` (e.g. `../<project>-wt`),
 > `<TEST_CMD>` / `<FULL_SUITE_CMD>` / `<LINT_CMD>` / `<BUILD_CMD>` / `<SMOKE_CMD>`, `<INVARIANTS>`
 > (project rules that are acceptance criteria on every change), and `<DECISION_RECORD>` (where
-> decisions are logged). Optionally `<TOKEN_TOOL>` (a shell-output compactor to prefix commands
+> decisions are logged). Optional knobs gate lane steps that only some stacks need:
+> `<DEP_AUDIT_CMD>` (intake's dependency sweep + audit's lockfile check), `<MIGRATIONS_DIR>` /
+> `<MIGRATE_DOWN_CMD>` / `<MIGRATE_UP_CMD>` / `<SCHEMA_DUMP>` (verify's migration validation +
+> audit's diff-shape check) — a lane step whose knob is unbound is skipped, not improvised.
+> Optionally `<TOKEN_TOOL>` (a shell-output compactor to prefix commands
 > with; omit if none).
 
 ## How to run
