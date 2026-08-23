@@ -114,6 +114,20 @@ The template ships the **per-issue** model. A simpler **serial** model exists �
   filesystem lock** (`.git/sdlc-maint.lock`, 30-min stale reap) that serializes only local
   git/worktree/artifact maintenance and never aborts a cycle.
 - A fresh lock only removes *that one issue* from eligibility; it never aborts the cycle.
+- **Shared `node_modules` — the junction convention.** A worktree needs the project's dependency
+  install to run `<TEST_CMD>` / `<LINT_CMD>`, but a per-tree install is minutes and gigabytes each.
+  So the convention is **one root-level `node_modules` junction** (Windows junction — no admin
+  needed; a plain directory symlink elsewhere) pointing at the main checkout's install. Both halves
+  are exported, tested helpers in `tools/sdlc.mjs`: `linkWorktreeNodeModules` creates it in the
+  `worktree` command right after `git worktree add` (idempotent — it never replaces a real
+  `node_modules` or a dangling link, and a link failure logs but never fails worktree creation),
+  and `unlinkWorktreeRootLinks` removes the link — never its target — before `git worktree
+  remove`, because on Windows that command recurses *through* a junction and deletes the target's
+  contents. The shared install is the standing hazard: **never run an install inside a worktree**
+  — it mutates the main checkout and every other junctioned tree. An issue that changes
+  dependencies unlinks the junction (non-recursive — never recursive-delete through it) and
+  installs for real. Existing worktrees converge on the convention as they're swept and recreated;
+  there is deliberately no repair sweep.
 - Best when throughput matters and multiple issues are in flight across lanes.
 
 ### Serial (simpler alternative)

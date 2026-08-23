@@ -34,6 +34,7 @@ import {
   parseWorktrees,
   planWorktreeSweep,
   unlinkWorktreeRootLinks,
+  linkWorktreeNodeModules,
   classifyStatusForSweep,
   computeDigest,
   computeSweep,
@@ -779,6 +780,89 @@ describe('unlinkWorktreeRootLinks (#723 — junction-safe sweep)', () => {
 
   it('returns [] for a missing tree path', () => {
     assert.deepEqual(unlinkWorktreeRootLinks(path.join(os.tmpdir(), 'sdlc-no-such-tree-xyz')), []);
+  });
+});
+
+describe('linkWorktreeNodeModules (#17 — creation half of the junction convention)', () => {
+  function makeScratch({ withSource = true } = {}) {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'sdlc-wt-link-'));
+    const root = path.join(base, 'main');
+    fs.mkdirSync(root);
+    if (withSource) {
+      fs.mkdirSync(path.join(root, 'node_modules', '.bin'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'node_modules', 'canary.txt'), 'canary');
+    }
+    const tree = path.join(base, 'wt');
+    fs.mkdirSync(tree);
+    return { base, root, tree };
+  }
+
+  it('links node_modules to the main checkout install and reports linked', () => {
+    const { base, root, tree } = makeScratch();
+    try {
+      const logs = [];
+      assert.equal(linkWorktreeNodeModules(root, tree, (m) => logs.push(m)), 'linked');
+      const link = path.join(tree, 'node_modules');
+      assert.equal(fs.lstatSync(link).isSymbolicLink(), true);
+      assert.equal(fs.readFileSync(path.join(link, 'canary.txt'), 'utf8'), 'canary');
+      assert.ok(logs.some((m) => m.includes('junction ->')));
+      // Round-trip with the teardown twin: unlink removes the link, not the target.
+      assert.deepEqual(unlinkWorktreeRootLinks(tree), ['node_modules']);
+      assert.equal(fs.existsSync(path.join(root, 'node_modules', 'canary.txt')), true);
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it('reports no-source (and creates nothing) when the main checkout has no node_modules', () => {
+    const { base, root, tree } = makeScratch({ withSource: false });
+    try {
+      assert.equal(linkWorktreeNodeModules(root, tree), 'no-source');
+      assert.throws(() => fs.lstatSync(path.join(tree, 'node_modules')));
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it('leaves a real node_modules directory alone and reports exists', () => {
+    const { base, root, tree } = makeScratch();
+    try {
+      fs.mkdirSync(path.join(tree, 'node_modules'));
+      fs.writeFileSync(path.join(tree, 'node_modules', 'own.txt'), 'own');
+      assert.equal(linkWorktreeNodeModules(root, tree), 'exists');
+      assert.equal(fs.lstatSync(path.join(tree, 'node_modules')).isSymbolicLink(), false);
+      assert.equal(fs.existsSync(path.join(tree, 'node_modules', 'own.txt')), true);
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it('regression: a dangling junction counts as present (lstat, not existsSync)', () => {
+    const { base, root, tree } = makeScratch();
+    try {
+      const gone = path.join(base, 'deleted-install');
+      fs.mkdirSync(gone);
+      fs.symlinkSync(gone, path.join(tree, 'node_modules'), 'junction');
+      fs.rmSync(gone, { recursive: true, force: true });
+      assert.equal(fs.existsSync(path.join(tree, 'node_modules')), false); // the trap
+      // Must not throw EEXIST and must not replace the dangling link.
+      assert.equal(linkWorktreeNodeModules(root, tree), 'exists');
+      assert.equal(fs.lstatSync(path.join(tree, 'node_modules')).isSymbolicLink(), true);
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true });
+    }
+  });
+
+  it('reports error without throwing when the link cannot be created', () => {
+    const { base, root } = makeScratch();
+    try {
+      const missingTree = path.join(base, 'no-such-wt');
+      const logs = [];
+      assert.equal(linkWorktreeNodeModules(root, missingTree, (m) => logs.push(m)), 'error');
+      assert.ok(logs.some((m) => m.includes('could not link')));
+    } finally {
+      fs.rmSync(base, { recursive: true, force: true });
+    }
   });
 });
 
