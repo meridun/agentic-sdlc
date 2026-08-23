@@ -34,7 +34,9 @@ the project name is genericized to `acme`. Bindings per [Composability.md](../Co
   `npm run e2e` · lint `npm run lint` · invariants: multi-actor safety (never assume single-user
   state), defensive at boundaries (guard `undefined`, especially DB results), data access only in
   the repository layer · known env limits: none declared · docs sinks: `README.md` + the `docs/`
-  tree.
+  tree · dep audit `npm audit --json` (intake sweep + audit lockfile check) · migrations
+  `db/migrations/` with `dbmate down` / `dbmate up` and schema dump `db/schema.sql` (verify
+  migration checks + audit diff-shape check).
 - **Deterministic core:** `tools/sdlc.mjs` — owns claim/emit/advance transition validation, the
   wip gate, the maintenance lock, the merge-sweep work-list/ack, and the cycle-prep report.
 - **Known deviations from spec:** none — this is the template's own default shape, declared so

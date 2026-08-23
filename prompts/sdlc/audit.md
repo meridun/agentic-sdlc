@@ -45,6 +45,17 @@ to **ADVANCE**. New commits invalidate a prior report — re-audit. Otherwise:
   - **Invariant + pattern compliance** — every one of `<INVARIANTS>` preserved on every new code path;
     the project's layering/placement rules honored; no secrets, tokens, or personal paths in committed
     fixtures or test data.
+- **Diff-scoped consistency checks** (read-only observations of the diff's *shape* — repo-global
+  concerns like the standing dependency-vulnerability sweep live in intake, not here; skip any
+  check whose knob the profile leaves unbound):
+  - Diff touches `<MIGRATIONS_DIR>` → it must also carry the regenerated `<SCHEMA_DUMP>`, and every
+    new migration must have a real down-block (not empty, not a placeholder). Missing either is a
+    BOUNCE (verify proves they *run*; audit checks the diff *shape*).
+  - Diff touches the dependency manifest or lockfile (e.g. `package.json` / `package-lock.json`)
+    → run `<DEP_AUDIT_CMD>` **on the branch**; a high/critical advisory **introduced or made
+    upgradable by this diff** is a blocking finding (BOUNCE → build to bump). Pre-existing
+    advisories the diff didn't touch are advisory notes only — they belong to intake's sweep;
+    don't block this issue on them.
 - If your project names a dedicated review tool or skill for this pass and the harness lacks it
   (headless/cron runs may), the checklist above applied to the diff is sufficient — never PARK
   over a missing tool.

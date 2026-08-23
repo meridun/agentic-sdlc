@@ -37,6 +37,25 @@ intake carries the post-merge bookkeeping:
   bounded by the ~24h window, and already-processed merges are no-ops.)
 - Note the sweep result in your final reply, then proceed to CLAIM.
 
+### 0b. DEPENDENCY AUDIT SWEEP (every pass — bookkeeping, not a claim; skip if `<DEP_AUDIT_CMD>` is unbound)
+Dependency vulnerabilities arrive on their own clock, independent of any feature in flight, so
+they're swept here — not gated per-issue in audit (which would block unrelated work on
+pre-existing advisories). Read-only against the repo; the only write is a tracker issue:
+- Run `<DEP_AUDIT_CMD>` (e.g. `npm audit --json`) on `<DEFAULT_BRANCH>` (fetch/pull first so the
+  lockfile is current). Ignore `low`/`info`; act on `moderate` and above.
+- Dedup before filing: `node tools/sdlc.mjs dup-check "dependency audit vulnerabilities"` (or
+  `gh issue list --search "dependency audit" --state open`) — an existing open dep-audit issue
+  covers the sweep; comment on it with any **new** advisories instead of filing a second.
+- If actionable advisories exist and no open issue tracks them, file **one batch issue** (not one
+  per advisory): title `dependency audit: <n> advisories (<highest severity>)`, body listing each
+  advisory (package, severity, via-chain, fix availability per the tool's output), labeled
+  `stage:intake`. It then flows the normal pipeline: design/build runs the tool's fix (e.g.
+  `npm audit fix`, or a manual bump when fix can't resolve it), verify proves the lockfile bump
+  didn't break anything, audit reviews the diff. **Never run the fix here** — intake changes no
+  repo files; the fix belongs on an accountable branch.
+- Audit clean (or nothing above `low`) → note `dep-audit: clear` and move on.
+- Note the result in your final reply, then proceed to CLAIM.
+
 ### 1. CLAIM
 Per the README universal loop — lane `stage:intake`, idle reply `INTAKE: idle`.
 
@@ -141,7 +160,8 @@ the design worker — never write or edit those here.
 
 ### 4. STOP
 One-line result: `INTAKE: <#issue> → ADVANCE(design|verify)|PARK|CLOSE — <reason>`
-(append `· SWEEP: <n> merges processed` when the merge sweep found any).
+(append `· SWEEP: <n> merges processed` when the merge sweep found any, and
+`· DEP-AUDIT: filed #n|commented #n|clear` when the dependency sweep ran).
 
 ---
 
