@@ -198,6 +198,9 @@ so no session policy can make it spawn anything.
 per-fork by design and per-*repo* within a multi-repo fork (each child PBI verifies to its own
 repo's bar). The stage semantics ("verify proves it works", "audit reviews security + invariants +
 contracts + docs + merge order") are fixed; what proof consists of is the fork's declaration.
+A fork with an inherited lint backlog may bind `<LINT_CMD>` to the reference **ratchet**
+(`tools/check-lint-baseline.mjs`: no growth vs a committed per-rule baseline + touched files
+clean) rather than "lint clean" — declare which in the profile so the gate is auditable.
 
 ## The conformance profile
 

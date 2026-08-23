@@ -219,7 +219,8 @@ proven at verify, and audited at audit:
 - **`<INVARIANTS>`** — the project-specific rules that must hold on every change (e.g. exit-code
   parity, backward-compatible schema, no secrets in fixtures, multiplayer-safe state). List them
   explicitly so build implements to them, verify exercises them, and audit reviews for them.
-- **`<LANG_CONVENTIONS>`** — the lint/format/test bar (e.g. `<LINT_CMD>` clean, `<FULL_SUITE_CMD>`
+- **`<LANG_CONVENTIONS>`** — the lint/format/test bar (e.g. `<LINT_CMD>` clean — or, on a repo with a
+  lint backlog, the ratchet `node tools/check-lint-baseline.mjs` passing plus touched files clean, `<FULL_SUITE_CMD>`
   green, formatter applied) that gates every commit.
 - **Decisions live in `<DECISION_RECORD>`, not in doc prose or build-branch cargo** — a decision is
   a one-liner linking to the issue that holds the debate. Workers never write ADR-style history into
