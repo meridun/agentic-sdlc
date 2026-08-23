@@ -52,6 +52,10 @@ detached — the worker yields, nothing resumes it, and the item strands under `
 
 ### Working style
 
+A project whose harness already loads always-on contributor instructions for every agent may
+replace the bullets below with a one-line **reference** to those instructions instead of restating
+them here — restated copies drift; a pointer can't.
+
 - **Worktree isolation:** never work in the main checkout — use the issue-scoped worktree
   `<WORKTREE_ROOT>/<issue#>` per the README universal loop. Claim with `sdlc:wip` + an
   `sdlc:claim <run-id> <lane>` comment, then claim-verify (earliest claim wins).
@@ -59,8 +63,13 @@ detached — the worker yields, nothing resumes it, and the item strands under `
   every change.
 - Minimal change; follow existing patterns; defensive at boundaries; never assume single-actor state.
 - Decisions go to `<DECISION_RECORD>`, never into doc prose.
-- If your project uses a shell-output compactor `<TOKEN_TOOL>`, prefix every shell command with it
-  (including each command in `&&` chains); it passes through unchanged when it has no matching filter.
+- If your project uses a shell-output compactor `<TOKEN_TOOL>`, bind one of its two modes here:
+  - **Explicit-prefix mode:** prefix every shell command with it (including each command in `&&`
+    chains); it passes through unchanged when it has no matching filter.
+  - **Transparent-wrapper mode:** the shell already routes the underlying commands (e.g. `git`,
+    `gh`, the package runner) through the compactor — call them **bare**. An explicit prefix here
+    is actively wrong: it bypasses the wrapper (and any telemetry the wrapper collects to
+    prioritize its filters).
 
 ### Output
 

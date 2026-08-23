@@ -27,7 +27,10 @@ to **ADVANCE**. New commits invalidate a prior report — re-audit. Otherwise:
   against `origin/<DEFAULT_BRANCH>` (fetch first — the diff must be against current
   `<DEFAULT_BRANCH>`, not a stale local copy). Read-only lane: audit never merges; if the branch no
   longer merges cleanly, **BOUNCE → build** naming the conflicting paths. Review the **diff**, not the
-  whole repo, with build's plan comment as the spec.
+  whole repo, with the issue body's `## Implementation plan` as the spec. The branch is **not** a
+  frozen build artifact: verify may have committed to it too (a spec/test fix within its remit),
+  and those commits are in the diff you're reviewing — audit them like any other change; don't
+  wave a commit through because verify authored it.
   - **No-branch fallback** (built outside the pipeline, already merged): reconstruct the diff from the
     introducing commits verify named (`git log -S`/`--grep`), scoped to the issue's files, so you audit
     the *change* and not the whole repo. Note in the report that you reviewed the isolated diff on
@@ -42,6 +45,20 @@ to **ADVANCE**. New commits invalidate a prior report — re-audit. Otherwise:
   - **Invariant + pattern compliance** — every one of `<INVARIANTS>` preserved on every new code path;
     the project's layering/placement rules honored; no secrets, tokens, or personal paths in committed
     fixtures or test data.
+- **Diff-scoped consistency checks** (read-only observations of the diff's *shape* — repo-global
+  concerns like the standing dependency-vulnerability sweep live in intake, not here; skip any
+  check whose knob the profile leaves unbound):
+  - Diff touches `<MIGRATIONS_DIR>` → it must also carry the regenerated `<SCHEMA_DUMP>`, and every
+    new migration must have a real down-block (not empty, not a placeholder). Missing either is a
+    BOUNCE (verify proves they *run*; audit checks the diff *shape*).
+  - Diff touches the dependency manifest or lockfile (e.g. `package.json` / `package-lock.json`)
+    → run `<DEP_AUDIT_CMD>` **on the branch**; a high/critical advisory **introduced or made
+    upgradable by this diff** is a blocking finding (BOUNCE → build to bump). Pre-existing
+    advisories the diff didn't touch are advisory notes only — they belong to intake's sweep;
+    don't block this issue on them.
+- If your project names a dedicated review tool or skill for this pass and the harness lacks it
+  (headless/cron runs may), the checklist above applied to the diff is sufficient — never PARK
+  over a missing tool.
 - Rank findings: **blocking** (must fix before ship) vs **advisory** (note, don't block).
 
 ### 3. EMIT exactly one outcome
@@ -50,7 +67,9 @@ to **ADVANCE**. New commits invalidate a prior report — re-audit. Otherwise:
   severity, and anything ship should carry into the docs fan-out (e.g. a security-relevant rule).
 - **BOUNCE → `stage:build`** — a blocking, fixable defect: a missing authz check, unvalidated input, an
   injection surface, a single-actor assumption, an invariant violation. Swap `stage:audit` →
-  `stage:build`, remove `sdlc:wip`, comment the specific finding (**file:line** + fix direction). The
+  `stage:build`, remove `sdlc:wip`, comment the specific finding (**file:line** + fix direction).
+  Apply the README **bounce cap**: two prior audit→build bounces on this issue for the same failure
+  class → PARK with the loop history instead of a third bounce. The
   fix re-flows build → verify → audit — that re-validation is intended, not waste. **Audit finds; build
   fixes** — don't patch it here (patching would skip re-verification).
 - **PARK** — needs a human **risk** call: a known tradeoff to accept, an ambiguous threat model, or a

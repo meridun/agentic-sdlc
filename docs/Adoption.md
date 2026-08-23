@@ -11,7 +11,19 @@ How to wire this template into a real repo. ~30 minutes for a first pass.
   - GitHub Copilot: `.github/agents/<WORKER_AGENT>.agent.md`
 
 Name the agent something project-scoped (e.g. `acme-sdlc-worker`) and use that everywhere `<WORKER_AGENT>`
-appears.
+appears. Avoid names already claimed by session-orchestration layers installed at the user level —
+e.g. pilotfish registers `scout`, `Explore`, `plan-verifier`, `security-reviewer`, `mech-executor`,
+`executor`, `verifier`, `security-executor` — a collision would silently swap in the wrong agent
+body. A project-scoped name sidesteps the whole class.
+
+Two Claude Code notes:
+
+- **Version floor.** The worker's no-delegation guarantee rests on the harness *enforcing* the
+  agent file's tool list, not on prompt text. Enforced tool exclusion is reliable on Claude Code
+  ≥ 2.1.219 — treat that as the floor for scheduled operation.
+- **`CLAUDE_CODE_SUBAGENT_MODEL`** silently overrides per-spawn model arguments; if it's set on the
+  dispatch machine, the per-lane tier table in `dispatch.md` is a no-op. Unset it for the
+  dispatcher's environment.
 
 - *(optional)* `skills/documentation-tiers/` → your harness's skill dir (Claude Code:
   `.claude/skills/documentation-tiers/`). Copy it if the ship stage's docs fan-out should follow the
@@ -37,15 +49,21 @@ Grep for `<` across `prompts/` and `agents/` and replace every one. The full lis
 | `<BUILD_CMD>` | Build/compile/launch the software for a real run | `npm run build` |
 | `<TEST_CMD>` | Targeted test run (build stage) | `npm test -- <path>` |
 | `<FULL_SUITE_CMD>` | Full test suite (verify stage) | `npm test` |
-| `<LINT_CMD>` | Lint/format/type gate that must be clean before commit | `npm run lint` |
+| `<LINT_CMD>` | Lint/format/type gate that must be clean before commit. On a repo with an existing lint backlog bind it to the **ratchet** (`node tools/check-lint-baseline.mjs`, §4a) — then "clean" means *no growth vs the committed per-rule baseline, and touched files clean on their own* | `npm run lint` · `npm run lint:baseline` |
 | `<SMOKE_CMD>` | Repeatable real-run / e2e / smoke spec (verify stage) | `npm run e2e` |
 | `<LANG_CONVENTIONS>` | The lint/format/test bar in one line | `eslint clean, prettier applied, jest green` |
 | `<INVARIANTS>` | Project rules that are ACs on **every** change — list them | `no breaking API changes; all endpoints authz-checked; no PII in logs` |
 | `<DECISION_RECORD>` | Where decisions are logged (a doc section, a registry file) | `docs/Decisions.md` |
+| `<DESIGN_ARTIFACTS>` | *(optional, design UX track)* the fork's conventions for design artifacts — what storyboards/mockups are, where they live, how they're authored; leave unbound to run spec-track only | `docs/mockups/ per its README` |
+| `<KNOWN_ENV_LIMITS>` | *(optional, verify)* declared environment limitations: the gate that can't run, its accepted substitute, and the report wording — so verify honors them instead of rediscovering (or PARKing over) them each pass | `integration suite needs local MySQL — covered via Docker e2e` |
 | `<DOCS_SINKS>` | Documentation targets ship fans out to | `README.md, docs/API.md` |
+| `<DEP_AUDIT_CMD>` | *(optional)* dependency-vulnerability scanner; binds intake's per-pass sweep (one batch issue, never a per-issue gate) and audit's lockfile-diff check. Unbound → both steps are skipped | `npm audit --json` · `pip-audit` · `cargo audit` |
+| `<MIGRATIONS_DIR>` | *(optional)* schema-migrations directory; when a diff touches it, verify runs the migration checks and audit checks the diff shape. Unbound → skipped | `db/migrations/` |
+| `<MIGRATE_DOWN_CMD>` / `<MIGRATE_UP_CMD>` | *(optional, with `<MIGRATIONS_DIR>`)* roll the newest migration(s) back / forward against a disposable DB | `dbmate down` / `dbmate up` · `alembic downgrade -1` / `alembic upgrade head` |
+| `<SCHEMA_DUMP>` | *(optional, with `<MIGRATIONS_DIR>`)* the committed schema dump the migration tool regenerates; must travel in the same diff as the migration | `db/schema.sql` |
 | `<DOCS_ROOT>` | *(optional, docs-tiers skill)* root of the L3 documentation tree | `docs/` |
 | `<DOC_DOMAINS>` | *(optional, docs-tiers skill)* thematic domain prefixes files route into | `Architecture_*, Testing_*, UserGuide_*` |
-| `<TOKEN_TOOL>` | *(optional)* shell-output compactor to prefix commands with; delete the mentions if none | `rtk` |
+| `<TOKEN_TOOL>` | *(optional)* shell-output compactor — either an explicit prefix on every command, or a transparent shell wrapper (see `agents/sdlc-worker.md` for the two binding modes); delete the mentions if none | `tok` |
 
 `<INVARIANTS>` is the one that most repays effort — it is the shared acceptance criterion build
 implements to, verify exercises, and audit reviews for. Be specific and concrete.
@@ -53,15 +71,48 @@ implements to, verify exercises, and audit reviews for. Be specific and concrete
 ## 4. Copy the reference CLI (recommended)
 
 Copy `tools/sdlc.mjs` into your repo (plain Node, no dependencies) and adapt the constants at the
-top — `DEFAULT_BRANCH`, `PROD_BRANCH`, and the worktree naming function. Then wire the lane prompts
-to it: wherever a prompt describes the claim lock, stage swap, or dispatcher gate ritual, have
-workers run the CLI one-shot instead (`node tools/sdlc.mjs claim|advance|gate|maint-lock|lanes|…`).
+top — `DEFAULT_BRANCH`, `PROD_BRANCH`, and the worktree naming function. `sdlc worktree` junctions
+each new worktree's `node_modules` to the main checkout's install (see the shared-install rule in
+`prompts/sdlc/README.md`); non-Node projects simply get a `no-source` no-op. Then wire the lane prompts
+to it: wherever a prompt describes the claim lock, outcome emit, stage swap, or dispatcher gate
+ritual, have
+workers run the CLI one-shot instead
+(`node tools/sdlc.mjs claim|emit|advance|gate|cycle-prep|maint-lock|lanes|…`).
 
 Why bother: `advance` validates every transition against the stage graph, which kills the
 hand-typed label-typo class (`stage:verfy`) by construction, and it makes the gate, machine
 maintenance lock, and claim-verify race check deterministic — the agent supplies judgment (what to
 spawn, what to write in comments), the CLI supplies the state math. The pure helpers are exported and the
 gh/git executors injectable, so you can unit-test your adaptations without touching GitHub.
+
+### 4a. Lint ratchet for repos with a backlog (optional)
+
+A lane gate of "`<LINT_CMD>` clean" is unenforceable when `<DEFAULT_BRANCH>` is already red: a
+worker can't tell its own breakage from inherited errors, so the gate is either ignored or blocks
+everything. `tools/check-lint-baseline.mjs` is a per-rule-id **ratchet**: it grandfathers the
+current ESLint error counts in a committed `tools/lint-baseline.json` and fails only on growth —
+counts may hold or shrink, never grow — and a rule id absent from the baseline (a new error
+class) also fails. It resolves `eslint` from *your* repo (a devDependency there; the script
+itself has no dependencies) and runs through the ESLint Node API with `cache: false`, so a stale
+`.eslintcache` can't produce phantom counts on one host and not another.
+
+1. Copy `tools/check-lint-baseline.mjs` alongside `tools/sdlc.mjs`; add
+   `"lint:baseline": "node tools/check-lint-baseline.mjs"` to `package.json` scripts.
+2. From a clean, fully installed checkout of `<DEFAULT_BRANCH>`, seed the baseline:
+   `npm run lint:baseline -- --update` and commit `tools/lint-baseline.json`.
+3. Add a CI step on every PR (deterministic across hosts — `npm ci` first):
+   ```yaml
+   - name: Lint ratchet — ESLint error counts must not grow
+     run: npm run lint:baseline
+   ```
+4. Bind `<LINT_CMD>` to `npm run lint:baseline` in the prompts and your profile's VP5 line.
+   Build and verify then gate on **ratchet passes + touched files clean** (`npx eslint <files>`);
+   `npm run lint` stays the interactive/human command and is expected to be red until the
+   backlog burns down. Burn it down opportunistically in files you touch, then lock in the lower
+   counts with `--update` (a re-baseline that *raises* a count is a review flag, not a fix).
+
+Non-ESLint stacks: the pure helpers (`aggregateCounts` / `compareToBaseline` / `reportCheck`)
+are generic — swap `lintRepo` for your linter's JSON output and keep the same baseline shape.
 
 ## 5. Choose your variant
 
@@ -72,15 +123,21 @@ gh/git executors injectable, so you can unit-test your adaptations without touch
   GitHub writes, and a per-machine maintenance lock the dispatcher creates automatically at
   `.git/sdlc-maint.lock`. Just confirm your platform allows git worktrees.
 
-Decide whether you want the optional `stage:design` lane (add the label + the shipped
-`prompts/sdlc/design.md` worker) or fold design into intake (shipped default).
+Design is a **standard stage** — every item gets a reviewed implementation plan there (spec-lite
+for small items), so the `stage:design` label and the shipped `prompts/sdlc/design.md` worker are
+part of the default pipeline. What you decide is whether to bind its **UX track**: bind
+`<DESIGN_ARTIFACTS>` in your profile if your work is user-facing and worth storyboarding; leave it
+unbound to run spec-track only.
 
 ## 6. Write your conformance profile
 
 Create `prompts/sdlc/PROFILE.md` from the skeleton in
 [Composability.md](Composability.md#the-conformance-profile), declaring your bindings for the five
 variation points and any known deviations. This is what keeps ad-hoc drift audits against the spec
-cheap. A worked ADO example lives at [profiles/work-ado.example.md](profiles/work-ado.example.md).
+cheap. Two worked examples: [profiles/github-single-repo.example.md](profiles/github-single-repo.example.md)
+(the minimal single-repo GitHub case most forks start from) and
+[profiles/work-ado.example.md](profiles/work-ado.example.md) (a multi-repo Azure DevOps
+read-only consumer).
 
 ## 7. Dry-run manually before scheduling
 
@@ -94,7 +151,12 @@ scheduled one will work. Walk one issue all the way through intake → ship this
 Register a recurring task whose body is a **thin pointer** to `dispatch.md`, e.g.:
 
 > Read `<REPO_PATH>/prompts/sdlc/dispatch.md` and execute one dispatch cycle for the `<PROJECT>`
-> project. The file is the canonical prompt; follow it exactly.
+> project: spawn one `<WORKER_AGENT>` subagent per non-empty lane as the file directs. The file is
+> the canonical prompt; follow it exactly.
+
+Keep the delegation cue ("spawn one `<WORKER_AGENT>` subagent per …") in the pointer itself:
+harness versions have been observed declining to spawn subagents from prompts that carry no
+explicit delegation instruction, and the pointer is the first text the scheduled session sees.
 
 Cadence: hourly is typical (the 2h reap threshold assumes ≤ hourly). Options:
 - **Claude Code scheduled tasks** — the native path; the task calls the dispatcher subagent.
@@ -111,6 +173,13 @@ conflict scan are scripted too and you've observed several clean cycles.
 
 ## 9. Watch the first few cycles
 
-The dispatcher's digest (end of every run) is your dashboard: machine-lock result, git maintenance,
+The dispatcher's digest (end of every run) is your dashboard: cycle duration, machine-lock result,
+git maintenance,
 one line per lane, queue depths, parked items, and **token cost per lane + cycle total**. That token line is the
 trend to watch for cost regressions. Parked (`sdlc:needs-human`) items are your action queue.
+
+**Track which pipeline paths the chain has actually exercised.** A full-chain ADVANCE run proves
+the happy path, but most BOUNCE/PARK/CONTINUE tails start out unproven — keep a short provenance
+list (which issues proved which paths) in your pipeline doc, and exercise an unproven tail
+manually before trusting it scheduled. Fold what those runs teach back into the worker prompts;
+the prompts, not the list, stay canonical for behavior.

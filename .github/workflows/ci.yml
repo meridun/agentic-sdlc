@@ -1,0 +1,19 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [dev, master]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Zero-dependency repo: no install step. Tests cover tools/sdlc.mjs and
+      # tools/check-lint-baseline.mjs (pure helpers; the ratchet's full-tree run
+      # is an adopter-side CI step — see docs/Adoption.md §4a).
+      - run: node --test "test/*.test.mjs"
