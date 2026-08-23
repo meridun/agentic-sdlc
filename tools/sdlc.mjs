@@ -20,6 +20,7 @@
  *   sdlc advance <issue> <to-stage>   validate transition, swap stage label, drop sdlc:wip
  *   sdlc context <issue>              branch + status + issue labels/state + open PRs for branch
  *   sdlc worktree <issue> [<branch>]  add a sibling git worktree for the issue's branch
+ *                                     (junctions its node_modules to the main checkout's install)
  *   sdlc comment <issue> <file>       post a body-file comment (plumbing only)
  *   sdlc dup-check "<keywords>"       rank open-issue dup candidates (exit 2 if any); judgment stays with the caller
  *
@@ -603,7 +604,8 @@ export function classifyStatusForSweep(porcelain, sizeOf) {
  * its target — is safe on every platform: `lstat` reports junctions as
  * symlinks, and a non-recursive `rmSync` unlinks the reparse point without
  * touching what it points at. Only root entries are scanned; the lane
- * convention creates at most one root-level `node_modules` junction.
+ * convention (`linkWorktreeNodeModules`, below) creates at most one root-level
+ * `node_modules` junction.
  *
  * @param {string} treePath worktree root about to be handed to `git worktree remove`
  * @param {(msg:string)=>void} log progress logger
@@ -629,6 +631,60 @@ export function unlinkWorktreeRootLinks(treePath, log = () => {}) {
     }
   }
   return removed;
+}
+
+/**
+ * Provision a freshly-created worktree's `node_modules` by linking it at the
+ * root to the main checkout's install — the creation half of the convention
+ * that `unlinkWorktreeRootLinks` (above) tears down. Without it every lane
+ * worker improvises: a full duplicate install per tree, or none at all and no
+ * way to run `<TEST_CMD>` / `<LINT_CMD>`.
+ *
+ * The link is a Windows **junction** (no admin rights needed, unlike a symlink;
+ * the absolute-target requirement is met since callers pass resolved paths);
+ * on other platforms Node ignores the type and makes a plain directory symlink.
+ * Either way `lstat().isSymbolicLink()` is true, so teardown handles both.
+ *
+ * The existence probe is `lstat`-based on purpose: `fs.existsSync` follows the
+ * link, so a *dangling* junction (shared install since deleted) would report
+ * `false` and `symlinkSync` would then throw `EEXIST`.
+ *
+ * Because the install is shared, `npm install` / `npm ci` run inside a
+ * junctioned worktree mutates the main checkout's `node_modules` (and every
+ * other junctioned worktree). An issue that changes dependencies must unlink
+ * first and install for real — see the share-don't-install rule in
+ * `prompts/sdlc/README.md`. Creation-only: there is deliberately no repair
+ * sweep over existing trees; they converge as they are swept and recreated.
+ *
+ * @param {string} root absolute path of the main checkout (the install to share)
+ * @param {string} target absolute path of the worktree just created
+ * @param {(msg:string)=>void} log progress logger
+ * @returns {'linked'|'exists'|'no-source'|'error'} what happened — and why nothing did, when nothing did
+ */
+export function linkWorktreeNodeModules(root, target, log = () => {}) {
+  const link = path.join(target, 'node_modules');
+  const source = path.join(root, 'node_modules');
+  try {
+    fs.lstatSync(link); // lstat, not existsSync: a dangling junction still counts as present
+    log('node_modules: already present (left alone)');
+    return 'exists';
+  } catch {
+    // absent — fall through and link
+  }
+  if (!fs.existsSync(source)) {
+    log('node_modules: none in main checkout — install in the worktree if the project needs one');
+    return 'no-source';
+  }
+  try {
+    fs.symlinkSync(source, link, 'junction');
+    log(`node_modules: junction -> ${source}`);
+    return 'linked';
+  } catch (err) {
+    // Never fail worktree creation over this: the worktree itself is good and
+    // the worker can still install by hand.
+    log(`node_modules: could not link (${String(err.message).split('\n')[0]}) — install by hand`);
+    return 'error';
+  }
 }
 
 /**
@@ -1214,6 +1270,7 @@ function cmdWorktree(args, { git, log }, root) {
     git(['worktree', 'add', '-b', branch, target, `origin/${DEFAULT_BRANCH}`]);
   }
   log(`worktree: ${target} (branch ${branch})`);
+  linkWorktreeNodeModules(root, target, log);
 }
 
 function cmdComment(args, { gh, log }) {

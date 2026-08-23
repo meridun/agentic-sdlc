@@ -122,6 +122,16 @@ comfortably.
      fails because the branch is checked out elsewhere, treat it as a lost claim race — release per
      CLAIM step 3 and move on. Do all git/build/test work inside the worktree; never stash, discard,
      or overwrite files in the main tree.
+   - **Shared dependency install — never `npm install` (or the ecosystem equivalent) inside a
+     worktree.** The reference CLI's `worktree` command junctions the new tree's root
+     `node_modules` to the main checkout's install, so `<TEST_CMD>` and `<LINT_CMD>` work
+     immediately with no per-tree install. That install is *shared*: an install run inside a
+     worktree mutates the main checkout and every other junctioned tree. An issue that changes
+     dependencies is the one exception — unlink the junction first (non-recursive `rmdir` /
+     `Remove-Item` on the link itself — never recursive-delete *through* it, which empties the
+     shared target), install for real in the tree, and say so in your emit body. CLI-less forks:
+     create the junction by hand (`mklink /J` / `ln -s`) or install per tree — but the
+     unlink-before-install rule is the same.
    - **Refresh from `<DEFAULT_BRANCH>` (staleness rule).** On entering the worktree:
      `git fetch origin`. If `git diff --name-only HEAD...origin/<DEFAULT_BRANCH>` (upstream side)
      intersects the paths this branch touches, `git merge origin/<DEFAULT_BRANCH>` (merge, never

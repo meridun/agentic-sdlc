@@ -67,7 +67,9 @@ implements to, verify exercises, and audit reviews for. Be specific and concrete
 ## 4. Copy the reference CLI (recommended)
 
 Copy `tools/sdlc.mjs` into your repo (plain Node, no dependencies) and adapt the constants at the
-top — `DEFAULT_BRANCH`, `PROD_BRANCH`, and the worktree naming function. Then wire the lane prompts
+top — `DEFAULT_BRANCH`, `PROD_BRANCH`, and the worktree naming function. `sdlc worktree` junctions
+each new worktree's `node_modules` to the main checkout's install (see the shared-install rule in
+`prompts/sdlc/README.md`); non-Node projects simply get a `no-source` no-op. Then wire the lane prompts
 to it: wherever a prompt describes the claim lock, outcome emit, stage swap, or dispatcher gate
 ritual, have
 workers run the CLI one-shot instead
