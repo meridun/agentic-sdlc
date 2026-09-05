@@ -152,6 +152,7 @@ same operation names. `<SDLC_CLI>` = `pwsh ./sdlc.ps1` in that fork.
 | `advance` | stage tag swap via the core |
 | `stage-repair` | add `stage:intake` tag via the core |
 | `park` | `sdlc:needs-human` tag on the Feature + `HUMAN ACTION REQUIRED` comment |
+| `dep-migrate` | none — declare orderings as links when filing; intake `dep-edge`s any prose it finds |
 | `readiness-derive` | the status-block rewrite (cache) — no derived tags |
 | `sweep-ack` | none — window-bounded |
 

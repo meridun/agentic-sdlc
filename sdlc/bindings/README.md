@@ -71,5 +71,6 @@ Write-side, dispatcher:
 | `advance <issue> <stage>` | dispatcher-side stage swap (the conflict bounce), validated against the stage graph, verify-before-write. |
 | `stage-repair <issue>` | zero stage markers → `stage:intake`, verify-before-write. |
 | `park <issue> <reason>` | `sdlc:needs-human` + comment (multi-stage marker, stalled worker). |
+| `dep-migrate` | *(optional)* convert line-leading prose declarations (`Depends on #n`, `Blocked by #n`, `**Dependencies:** …`) in open-issue records into edges; idempotent; unresolvable references logged as skipped. Run every cycle and by intake. |
 | `readiness-derive` | *(optional)* rewrite derived readiness markers from edges + lint (edge-less `blocked`, cycles). |
 | `sweep-ack` | *(optional)* mark the close-sweep window processed; absent → the sweep is window-bounded and idempotent. |

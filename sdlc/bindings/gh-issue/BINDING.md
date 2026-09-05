@@ -121,6 +121,7 @@ fallback, normative for what the op must do.
 | `advance` | `sdlc advance <issue> <stage>` | re-read labels, then swap |
 | `stage-repair` | inside `cycle-prep` lanes report (lists ≠1) | `gh issue edit <n> --add-label stage:intake` after re-reading labels |
 | `park` | — | `gh issue edit <n> --add-label sdlc:needs-human` + `sdlc-dispatch: …` comment |
+| `dep-migrate` | `sdlc deps --migrate --apply` (every `cycle-prep --apply`, the `=== deps-migrate ===` section, before `deps`; dry run without `--apply`) | §6 per prose line, by hand |
 | `readiness-derive` | `sdlc deps --apply` (every `cycle-prep --apply`); `LINT` lines: `label-only-blocked`, `cycle` | skip — the labels are optional |
 | `sweep-ack` | `sdlc sweep --ack` **after** processing the work-list (at-least-once delivery) | none — the sweep is bounded by its ~24 h window and idempotent |
 

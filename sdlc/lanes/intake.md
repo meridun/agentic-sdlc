@@ -70,7 +70,33 @@ All inline, read-only (no code changes, no branches):
 - **Duplicate/overlap search:** `dup-search "<title or keywords>"` excluding this issue — the
   binding's core ranks open issues by keyword overlap; judge each hit yourself, and cast the wider
   net across *closed* issues too where the binding offers it. An existing issue covering the same
-  thing is a close-as-dup; a partial overlap is a scope note.
+  thing is a close-as-dup. A partial overlap is a scope note — **unless it is an ordering**: if
+  this issue can't land until the overlapping open issue does (a provider this consumes, a
+  predecessor it extends), that is a dependency edge, not a note, even when the other issue is
+  still an untouched backlog item in `stage:queued`/`design`/`intake` (the collision sweep below
+  only covers work already *in flight*). Check the reverse direction on every hit too: if an
+  existing open issue is waiting on the thing this issue delivers (its record names the
+  capability, or a `Depends on` line with no number to point at), add the edge the other way —
+  *that* issue blocked by this one. Record edges per **Dependency edges** below.
+- **Dependency edges** (the one tracker write here besides markers and sections; runs whenever
+  any step finds an ordering):
+  1. **Convert the author's prose first.** A line such as `Depends on #n`, `Blocked by: #n`, or
+     `**Dependencies:** …` in the issue's record is a declaration the gate cannot see until it is
+     an edge. The dispatcher's `dep-migrate` pass converts them each cycle, but an issue filed or
+     edited since then (or a manual run) reaches you unconverted. Run `dep-migrate` where the
+     binding's core offers it (gh-issue: `sdlc deps --migrate --apply`, idempotent, every open
+     issue at once — this issue's lines are among them); without it, `dep-edge` each by hand.
+  2. **Create the edge** for each ordering found in the dedup search or the collision sweep —
+     `dep-edge <this> <n>`, this issue *blocked by* #n. The edge is what keeps every lane from
+     claiming this issue until #n closes; any `blocked`/`ready` markers are derived from it by
+     the dispatcher, so never set them by hand as a substitute. A blocker the tracker can't link
+     (another repo, another tracker) is `sdlc:hold` + the prose line instead, and say so in the
+     comment.
+  3. **Write the human mirror in the record**, not only a comment: a `Depends on #n` line in
+     `## Requirements` (one per blocker — the close sweep strikes it when #n closes). Mention the
+     edges in the summary comment too.
+  Adding an edge does **not** change the verdict — still EMIT normally on the rest of the triage;
+  an ADVANCE with an open blocker simply sits in `stage:design` until the gate releases it.
 - **In-progress collision sweep** — does work on this already exist somewhere, even without a matching
   issue title? Three probes, cheap to expensive; stop as soon as one is conclusive:
   1. **Local + remote branches:** `git fetch origin && git branch -a`. Branch names follow
@@ -93,13 +119,9 @@ All inline, read-only (no code changes, no branches):
   recutting. Work already partially merged to `<DEFAULT_BRANCH>` gets the same treatment: note
   shipped-vs-missing in `## Requirements`; the AC still describes the full behavior. Otherwise:
   same work in flight → close as dup linking the live item (or its issue). Partial overlap
-  where this issue can't proceed until the in-flight work lands → **record the dependency edge**
-  (`dep-edge <this> <n>` — this issue *blocked by* #n), comment "blocked by #n" as the human
-  mirror, and still EMIT normally on the rest of the triage. The edge is what keeps every lane
-  from claiming this issue until #n closes; any `blocked`/`ready` markers are derived from it by
-  the dispatcher, so never set them by hand as a substitute. A blocker the tracker can't link
-  (another repo, another tracker) is `sdlc:hold` + the prose line instead, and say so in the
-  comment. Mere adjacency → a scope note in the summary comment naming the
+  where this issue can't proceed until the in-flight work lands → an ordering: record it per
+  **Dependency edges** above (this issue *blocked by* #n) and still EMIT normally on the rest of
+  the triage. Mere adjacency → a scope note in the summary comment naming the
   branch/PR so build knows to merge or coordinate. Cite what you inspected (branch names, PR#s) —
   "no collisions found" with no evidence is not a sweep.
 - **Docs + code assessment:** read the issue and any comments, then check whether it conflicts with or
@@ -107,8 +129,9 @@ All inline, read-only (no code changes, no branches):
   docs and non-goals, then the code.
 - Judge: **coherent** (clear what's being asked), **scoped** (one unit of work, not a program),
   **non-duplicate**, **invariant-compatible** (doesn't violate `<INVARIANTS>` — if it does by design,
-  that's a decision debate, not an auto-close), and whether an **undecided product/scope question
-  gates it**. (Whether UX design is settled is *not* intake's call — the design worker adjudicates
+  that's a decision debate, not an auto-close), **ordered** (every prerequisite found above — prose,
+  dedup hit, or collision — is now an edge, or a stated `sdlc:hold` for an unlinkable blocker), and whether an
+  **undecided product/scope question gates it**. (Whether UX design is settled is *not* intake's call — the design worker adjudicates
   that itself.)
 
 **If the verdict is ADVANCE, author the requirements before routing.** The issue's evidence
@@ -154,7 +177,8 @@ the design worker — never write or edit those here.
 
   Swap `stage:intake` → `stage:design` (or `stage:verify` per the routing above), remove
   `sdlc:wip`. Comment a 2–4 line summary: what it is, the parent feature it grows from, **which
-  lane you routed to and why**, the decision recorded (if any), links to related issues.
+  lane you routed to and why**, the decision recorded (if any), the dependency edges created
+  (`blocked by #n`), links to related issues.
 - **PARK** — a product/scope question gates the work, or scope is ambiguous, or it's a
   possible-but-unconfirmed dup. Frame the debate **in the issue** (options, tradeoffs, a recommendation
   — this is the debate the record will point to). Add `sdlc:needs-human`, remove `sdlc:wip`, lane stays
@@ -165,10 +189,21 @@ the design worker — never write or edit those here.
 - **BOUNCE / CLOSE** — incoherent, out of scope (check the non-goals), or a confirmed duplicate. Close
   with a one-paragraph rationale (link the dup). Remove `sdlc:wip`.
 
+  **Re-point dependents before a dup close.** A closed blocker satisfies its edges however it
+  closed, so anything *blocked by* this issue would become eligible next cycle with the real
+  prerequisite (the canonical issue) still open. Before closing: read this issue's `blocking`
+  edges (`gh api graphql` — `blocking { number state }`; with the CLI, `sweep`'s edge query is
+  the same shape), and for each **open** dependent add `blocked_by <canonical#>` (same REST call
+  as above, canonical's numeric id) and a `Depends on #<canonical>` line in its body. Name the
+  re-pointed issues in the close rationale. A close for incoherence or out-of-scope re-points
+  nothing — its dependents are genuinely unblocked, and the close sweep will tell their humans.
+
 ### 4. STOP
 One-line result: `INTAKE: <#issue> → ADVANCE(design|verify)|PARK|CLOSE — <reason>`
-(append `· SWEEP: <n> closes processed` when the close sweep found any, and
-`· DEP-AUDIT: filed #n|commented #n|clear` when the dependency sweep ran).
+(append `· SWEEP: <n> closes processed` when the close sweep found any,
+`· DEP-AUDIT: filed #n|commented #n|clear` when the dependency sweep ran, and
+`· EDGES: blocked by #n[, #m]|re-pointed #a→#c|none` whenever the triage created or re-pointed a
+dependency edge).
 
 ---
 
@@ -176,10 +211,11 @@ One-line result: `INTAKE: <#issue> → ADVANCE(design|verify)|PARK|CLOSE — <re
 - **Intake owns the product/scope debates** (UX picks belong to design). It never picks
   the winner of a debate — it frames and parks; the human decides in-thread; the next pass graduates
   the answer into `<DECISION_RECORD>`.
-- **Tracker reads are in scope here** — intake's duplicate search and in-flight probes use the
-  binding's read ops inline even though the research approach is otherwise read-only. The
-  collision sweep's git commands (`fetch`, `branch -r`, `log`, `diff`) are read-only too — they
-  inspect remote branches without checking anything out.
+- **Tracker operations are in scope here** — intake's duplicate search and in-flight probes use
+  the binding's read ops inline even though the research approach is otherwise read-only, and
+  the dependency-edge writes (`dep-edge`, `dep-migrate`) are tracker bookkeeping, not repo
+  changes. The collision sweep's git commands (`fetch`, `branch -r`, `log`, `diff`) are read-only
+  too — they inspect remote branches without checking anything out.
 - **Idempotent — unless the thread says otherwise:** a prior intake summary comment → re-confirm the
   verdict cheaply, don't re-research. A PARKed item with an in-thread answer should ADVANCE next
   pass. **Exception:** a bounce/comment asking for re-evaluation (e.g. a long-held issue returned as

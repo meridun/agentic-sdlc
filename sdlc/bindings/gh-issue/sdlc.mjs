@@ -42,7 +42,7 @@
  *   sdlc sweep    [--state <file>]    read-only close-sweep work-list for intake step 0:
  *                                     closed issues → open issues they were blocking (native edges); `sweep: clear`
  *                                     if none; writes nothing — `sweep --ack` (run after processing) marks closes swept
- *   sdlc cycle-prep [--apply]         the whole pre-dispatch sequence (mint→maint-lock→lanes→gate --reap→deps→
+ *   sdlc cycle-prep [--apply]         the whole pre-dispatch sequence (mint→maint-lock→lanes→gate --reap→deps-migrate→deps→
  *                                     sweep→git-maint→worktree-sweep→conflict-scan→maint-release) in one
  *                                     delimited, machine-readable report
  *   sdlc digest   [--state <file>]    queue depths, parked/hold lists, arrivals-diff vs last cycle
@@ -2386,7 +2386,7 @@ function cmdDeps(args, { gh, log }) {
 
 /**
  * `sdlc cycle-prep [--apply]`: the whole fixed, zero-judgment pre-dispatch
- * sequence in one shot — mint → maint-lock → lanes → gate --reap → sweep →
+ * sequence in one shot — mint → maint-lock → lanes → gate --reap → deps-migrate → deps → sweep →
  * (git-maint → worktree-sweep → conflict-scan) → maint-release — emitting one
  * delimited, machine-readable report so the dispatcher runs `cycle-prep`,
  * reads it, spawns workers, then `digest`.
@@ -2432,6 +2432,19 @@ function cmdCyclePrep(args, deps, root) {
 
     section('gate');
     cmdGate(['--reap'], deps, root);
+
+    // Prose `Depends on #n` declarations → native edges, every cycle (not only
+    // at adoption): an issue filed between cycles carries its dependencies as
+    // prose the gate cannot see until an edge exists. Runs BEFORE the derived
+    // label pass so a freshly converted edge yields `blocked` this same cycle.
+    // Edge POSTs are idempotent and follow --apply; dry run otherwise. This is
+    // the one pass that fetches issue bodies (its own GraphQL page set).
+    section('deps-migrate');
+    try {
+      cmdDeps(apply ? ['--migrate', '--apply'] : ['--migrate'], deps, root);
+    } catch (err) {
+      log(`deps --migrate: skipped (${String(err.message).split('\n')[0]})`);
+    }
 
     // Derived readiness labels + dependency lint (#27). Label writes are
     // idempotent bookkeeping, so they follow --apply like the other mutators;
@@ -2505,7 +2518,7 @@ const USAGE = `sdlc — deterministic SDLC pipeline one-shots (reference impleme
   sdlc deps --migrate [--apply]     prose "Depends on #n" lines → native blocked_by edges (dry run unless --apply)
   sdlc sweep    [--state <file>] [--window <hours>]  closed issues → the open issues they were blocking (native edges; read-only)
   sdlc sweep --ack [--state <file>] [--window <hours>]  mark the window's closes swept (run AFTER processing the work-list)
-  sdlc cycle-prep [--apply]         the whole pre-dispatch sequence in one shot (mint→maint-lock→lanes→gate --reap→deps→sweep→git-maint→worktree-sweep→conflict-scan→maint-release), one delimited report
+  sdlc cycle-prep [--apply]         the whole pre-dispatch sequence in one shot (mint→maint-lock→lanes→gate --reap→deps-migrate→deps→sweep→git-maint→worktree-sweep→conflict-scan→maint-release), one delimited report
   sdlc digest   [--state <file>]    depths, parked/hold, arrivals-diff vs last cycle
 
 Stages: ${STAGES.join(' → ')}`;

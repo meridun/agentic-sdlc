@@ -127,6 +127,15 @@ applied`), the cycle degrades to the marker-only gate: record it in the digest a
 `stage:build`+ workers for items whose record names an unmerged blocker until the next cycle can
 read edges again.
 
+**Prose declarations → edges, every cycle (`dep-migrate`, optional).** Where the binding's core
+offers it (gh-issue: `sdlc deps --migrate --apply`, part of `cycle-prep --apply` as the
+`=== deps-migrate ===` section; dry run without `--apply`), this op converts line-leading
+`Depends on #n` / `Blocked by #n` / `**Dependencies:** …` lines in open-issue records into
+blocked-by edges, so an issue filed between cycles with prose dependencies is gated from its
+first cycle rather than waiting for intake to convert it. Idempotent (an existing edge is
+skipped); a reference the tracker can't resolve is logged as `skipped` and stays prose. It runs
+*before* `readiness-derive` so a freshly created edge gets its `blocked` marker the same cycle.
+
 **Derived readiness markers + lint (`readiness-derive`, optional).** Where the binding keeps
 `blocked` / `ready` markers, this op rewrites them *from* edge state each cycle — open blocker →
 `blocked`; edges all closed → `ready` — so humans keep a readable readiness column the machine

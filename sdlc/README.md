@@ -250,7 +250,7 @@ body, Feature description, PBI description) is the binding's `read` / `write-sec
 | [`PROFILE.md`](PROFILE.md) | — | **the one file adoption fills**: binding choice, every `<KEY>`, variation points, deviations |
 | [`bindings/`](bindings/README.md) | — | the operation contract + one directory per substrate (`gh-issue`, `ado-feature`, `ado-pbi`) |
 | [`dispatch.md`](dispatch.md) | *(dispatcher — runs every lane)* | scheduled task; git/worktree maintenance + per-lane fan-out |
-| [`lanes/intake.md`](lanes/intake.md) | `stage:intake` → `stage:design` *(or `stage:verify`, already-built floor)* | triage, dedup, requirements + AC authoring, decision debates + close sweep |
+| [`lanes/intake.md`](lanes/intake.md) | `stage:intake` → `stage:design` *(or `stage:verify`, already-built floor)* | triage, dedup, dependency edges, requirements + AC authoring, decision debates + close sweep |
 | [`lanes/design.md`](lanes/design.md) | `stage:design` → `stage:queued` | standard phase: implementation plan (spec track) for every item; optional UX track |
 | [`lanes/build.md`](lanes/build.md) | `stage:build` → `stage:verify` | execute the reviewed plan → implement + targeted tests |
 | [`lanes/verify.md`](lanes/verify.md) | `stage:verify` → `stage:audit` | full suite + real-run smoke |
@@ -274,3 +274,16 @@ ignores; any `blocked` / `ready` readiness markers the binding keeps are **deriv
 edges each cycle and never read by the machine — so never set them by hand as a substitute for the
 edge. An edge the tracker cannot represent (a blocker in another repo or another tracker) is
 `sdlc:hold` + the prose line, stated in the comment.
+
+**Prose declarations are converted, not trusted.** `dep-migrate` turns a record's `Depends on #n`
+/ `**Dependencies:** …` lines into edges. The dispatcher runs it every cycle and intake runs it
+again in its WORK step, so a declaration is converted by whichever comes first; between filing
+and that first conversion the gate cannot see it, and a reference the tracker can't resolve is
+never converted (`sdlc:hold` + prose).
+
+**Closing a blocker satisfies its edges — so re-point before a dup close.** An edge whose blocker
+is closed never blocks, however it closed. When a lane closes an issue as a duplicate of a
+*still-open* canonical issue, every issue blocked by the dup would become eligible on the next
+cycle with its real prerequisite unmet. Before the close, read the dup's *blocking* edges
+(`dep-read`) and `dep-edge` each open dependent onto the canonical issue; then close. Closing on
+a merged PR needs no re-pointing — the work landed.

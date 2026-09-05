@@ -1792,9 +1792,10 @@ describe('cycle-prep (one-shot pre-dispatch sequence)', () => {
       // Every section, clearly delimited, in order.
       const sections = logs.filter((l) => l.startsWith('\n=== ')).map((l) => l.replace(/[\n= ]/g, ''));
       assert.deepEqual(sections, [
-        'maint-lock', 'lanes', 'gate', 'deps', 'sweep',
+        'maint-lock', 'lanes', 'gate', 'deps-migrate', 'deps', 'sweep',
         'git-maint', 'worktree-sweep', 'conflict-scan', 'maint-release', 'summary',
       ]);
+      assert.ok(out.includes('deps --migrate: no prose dependency declarations to migrate.'));
       // Identical semantics to the individual commands.
       assert.ok(out.includes('maint-lock: ACQUIRED'));
       assert.ok(out.includes('intake: depth 0'));
@@ -1807,6 +1808,33 @@ describe('cycle-prep (one-shot pre-dispatch sequence)', () => {
       assert.ok(out.includes('maintenance previewed'));
       // Lock released at the end of the maintenance section.
       assert.equal(fs.existsSync(lockDir(root)), false);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('converts prose dependency declarations to native edges every cycle — proposed on a dry run, POSTed under --apply', () => {
+    const root = makeRoot();
+    try {
+      // #20 was filed between cycles with a prose dependency and no edge yet.
+      const gh = idleGh({
+        [graphqlKey('OPEN')]: graphqlPage([
+          { number: 20, id: 2000, body: 'Depends on #21', labels: ['stage:intake'], blockedBy: [] },
+          { number: 21, id: 2100, body: '', labels: ['stage:queued'] },
+        ]),
+      });
+      const logs = [];
+      runSdlc(['cycle-prep'], { gh, git: idleGit(), log: (m) => logs.push(m), root });
+      const out = logs.join('\n');
+      assert.ok(out.includes('deps --migrate: #20 blocked_by #21 (OPEN)'));
+      assert.ok(out.includes('dry run'));
+      assert.equal(gh.calls.some((c) => c.includes('POST')), false);
+      // deps-migrate runs before the derived-label pass, so a new edge is labelled the same cycle.
+      assert.ok(out.indexOf('=== deps-migrate ===') < out.indexOf('=== deps ==='));
+
+      runSdlc(['cycle-prep', '--apply'], { gh, git: idleGit(), log: () => {}, root });
+      const posts = gh.calls.filter((c) => c.includes('POST')).map((c) => c.join(' '));
+      assert.deepEqual(posts, ['api -X POST repos/{owner}/{repo}/issues/20/dependencies/blocked_by -F issue_id=2100']);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
