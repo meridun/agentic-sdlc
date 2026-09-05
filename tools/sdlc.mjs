@@ -1026,21 +1026,24 @@ export function computeDeps(openIssues) {
  * to native edges (`sdlc deps --migrate`). Pure.
  *
  * Matches only a declaration that STARTS a line (after optional list markers,
- * emphasis, and a `blocked`/`depends` heading colon) — `Depends on #12`,
- * `- Blocked by: #12, #13`, `**Requires** #12`, `After #12` — so narrative
- * mentions like "None depends on #1337" or "does not depend on #1161" (both
- * real false positives of the old regex-over-bodies sweep) never propose an
- * edge. Self-references are dropped; results are unique, ascending.
+ * emphasis, a `**Dependencies:**` label, and a `blocked`/`depends` heading
+ * colon) — `Depends on #12`, `- Blocked by: #12, #13`, `**Requires** #12`,
+ * `After #12`, `**Dependencies:** Depends on K.3b #161` (a roadmap identifier
+ * may sit between the keyword and the `#n`) — so narrative mentions like "None
+ * depends on #1337" or "does not depend on #1161" (both real false positives of
+ * the old regex-over-bodies sweep) never propose an edge. Self-references are
+ * dropped; results are unique, ascending.
  */
 export function parseProseDependencies(body, selfNumber = null) {
   const found = new Set();
-  const LEAD = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?(?:\[[ x]\]\s+)?[*_~`]*\s*(?:depends\s+on|blocked\s+by|blocked\s+on|requires|after)\b[*_~`]*\s*:?\s*(.*)$/i;
+  const LEAD = /^\s*(?:[-*+]\s+|\d+[.)]\s+)?(?:\[[ x]\]\s+)?[*_~`\s]*(?:dependenc(?:y|ies)[*_~`\s]*:?[*_~`\s]*)?(?:depends\s+on|blocked\s+by|blocked\s+on|requires|after)\b[*_~`]*\s*:?\s*(.*)$/i;
   for (const raw of String(body ?? '').split(/\r?\n/)) {
     const m = raw.match(LEAD);
     if (!m) continue;
-    // Only the leading run of `#n` references (with separators) counts —
+    // Only the leading run of `#n` references (with separators, each optionally
+    // preceded by one identifier token such as `K.3b` or `owner/repo`) counts —
     // "Depends on #12 and the API rework" contributes just #12.
-    const refs = m[1].match(/^(?:\s*(?:,|and|&|\/)?\s*(?:[^\s#]*\/[^\s#]*)?#\d+)+/i);
+    const refs = m[1].match(/^(?:\s*(?:,|and|&|\/)?\s*(?:[^\s#,]+\s+)?#\d+)+/i);
     if (!refs) continue;
     for (const n of refs[0].match(/#(\d+)/g) ?? []) {
       const num = Number(n.slice(1));
@@ -1233,7 +1236,9 @@ export function scoreDupCandidates(query, issues, opts = {}) {
 
 // --- I/O boundary: gh / git executors (injectable for tests) -------------------
 
-const defaultGh = (args) => execFileSync('gh', args, { encoding: 'utf8' });
+// 64 MB buffer: a GraphQL page of 100 issues with bodies can exceed Node's 1 MB
+// default, which kills the child with SIGTERM and no useful error.
+const defaultGh = (args) => execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 const defaultGit = (args) => execFileSync('git', args, { encoding: 'utf8' });
 
 /** Fetch an issue's label names via gh. */
@@ -1266,11 +1271,11 @@ function snapshotOpenIssues(gh, fields = 'number,labels,createdAt,title') {
  * numeric id the REST edge-write endpoint wants (`-F issue_id=`), which is NOT
  * the issue number.
  */
-const ISSUE_GRAPH_QUERY = `query($owner:String!,$name:String!,$states:[IssueState!],$after:String){
+const issueGraphQuery = (withBody) => `query($owner:String!,$name:String!,$states:[IssueState!],$after:String){
   repository(owner:$owner,name:$name){
     issues(states:$states, first:100, after:$after, orderBy:{field:UPDATED_AT,direction:DESC}){
       pageInfo{hasNextPage endCursor}
-      nodes{ number databaseId title state closedAt createdAt updatedAt body
+      nodes{ number databaseId title state closedAt createdAt updatedAt${withBody ? ' body' : ''}
         labels(first:50){nodes{name}}
         blockedBy(first:50){nodes{number state}}
         blocking(first:50){nodes{number state}} }
@@ -1284,12 +1289,14 @@ const ISSUE_GRAPH_QUERY = `query($owner:String!,$name:String!,$states:[IssueStat
  * blockedBy:[{number,state}], blocking:[{number,state}] }]`. `stopWhen(issue)`
  * ends pagination early (issues arrive newest-updated first, so a time cutoff
  * on `updatedAt` — which is ≥ `closedAt` — bounds the closed-issue fetch).
+ * Bodies are requested only with `withBody` (the migration parser needs them;
+ * a page of 100 long bodies runs to megabytes, so nothing else asks).
  */
-function fetchIssueGraph(gh, states, { stopWhen = null, maxPages = 20 } = {}) {
+function fetchIssueGraph(gh, states, { stopWhen = null, maxPages = 20, withBody = false } = {}) {
   const issues = [];
   let after = null;
   for (let page = 0; page < maxPages; page += 1) {
-    const args = ['api', 'graphql', '-f', `query=${ISSUE_GRAPH_QUERY}`, '-F', 'owner={owner}', '-F', 'name={repo}', '-f', `states=${states}`];
+    const args = ['api', 'graphql', '-f', `query=${issueGraphQuery(withBody)}`, '-F', 'owner={owner}', '-F', 'name={repo}', '-f', `states=${states}`];
     if (after) args.push('-f', `after=${after}`);
     const data = JSON.parse(gh(args));
     const conn = data?.data?.repository?.issues;
@@ -2311,13 +2318,25 @@ function cmdSweep(args, { gh, log }, root) {
 function cmdDeps(args, { gh, log }) {
   const apply = args.includes('--apply');
   const migrate = args.includes('--migrate');
-  const openIssues = fetchIssueGraph(gh, 'OPEN');
+  const openIssues = fetchIssueGraph(gh, 'OPEN', { withBody: migrate });
 
   if (migrate) {
-    // Every issue an edge could target: open (already fetched) + closed.
+    // Every issue an edge could target: open (already fetched) plus, for each
+    // prose-referenced number not open, one REST lookup — cheaper than paging a
+    // long closed backlog, and a 404 (deleted/transferred) is simply unknown.
     const known = {};
     for (const i of openIssues) known[i.number] = { id: i.id, state: 'OPEN' };
-    for (const i of fetchIssueGraph(gh, 'CLOSED')) known[i.number] = { id: i.id, state: 'CLOSED' };
+    const referenced = new Set(openIssues.flatMap((i) => parseProseDependencies(i.body, i.number)));
+    for (const n of referenced) {
+      if (known[n]) continue;
+      try {
+        const v = JSON.parse(gh(['api', `repos/{owner}/{repo}/issues/${n}`, '--jq', '{id: .id, state: .state, pull_request: (.pull_request != null)}']));
+        if (v.pull_request) continue; // a PR number, not an issue — no edge possible
+        known[n] = { id: v.id, state: String(v.state).toUpperCase() };
+      } catch {
+        // unknown — planDependencyMigration reports it as skipped
+      }
+    }
     const { proposals, skipped } = planDependencyMigration(openIssues, known);
     if (!proposals.length && !skipped.length) {
       log('deps --migrate: no prose dependency declarations to migrate.');
