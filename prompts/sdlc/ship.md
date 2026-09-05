@@ -5,7 +5,7 @@ Stage: `stage:ship` → *(closed on merge)*
 The terminal worker. The item arrives **audited** (green + safe); ship fans the change out to its
 documentation sinks and opens the PR (`feat → <DEFAULT_BRANCH>`, `Closes #`). The **PR merge** —
 human-gated, like the `stage:queued` throttle — is the real terminal event: on merge the issue
-auto-closes and dependents cascade-unblock (via intake's merge sweep). Ship's job ends at "PR open."
+auto-closes, the dispatcher unblocks its dependents from the native dependency edges on the next cycle, and intake's close sweep posts the bookkeeping. Ship's job ends at "PR open."
 
 ---
 
@@ -20,7 +20,7 @@ Per the README universal loop — lane `stage:ship`, idle reply `SHIP: idle`.
 ### 2. WORK
 Idempotency first: a PR for this branch already open with the docs fan-out done → skip to **ADVANCE**.
 A PR for this branch already **merged** with the issue still open → PARK with the merge evidence for a
-human to close (intake's merge sweep normally handles these).
+human to close (a close cascades to dependents through the native dependency edges; intake's close sweep posts the bookkeeping).
 Otherwise, in the issue's worktree (`<WORKTREE_ROOT>/<issue#>`) on build's branch
 (`<type>/<issue#>-<slug>`):
 
@@ -55,8 +55,8 @@ Otherwise, in the issue's worktree (`<WORKTREE_ROOT>/<issue#>`) on build's branc
 ### 3. EMIT exactly one outcome
 - **ADVANCE (terminal)** — docs fanned out and the PR is open. Remove `stage:ship` and `sdlc:wip`.
   Comment the ship summary + PR link. The **PR merge is the terminal event** (human-gated, like the
-  queued throttle): on merge, `Closes #` auto-closes the issue, and intake's **merge sweep** runs the
-  cascade-unblock on a later pass. Ship does **not** force-close before merge — the code isn't on
+  queued throttle): on merge, `Closes #` auto-closes the issue, the dispatcher's eligibility gate unblocks dependents from the native edges next cycle, and intake's **close sweep** posts the
+  "blocker landed" bookkeeping on a later pass. Ship does **not** force-close before merge — the code isn't on
   `<DEFAULT_BRANCH>` yet, so closing early would lie.
 - **BOUNCE → `stage:build`** — a real code problem surfaces at the last look (something verify/audit
   missed, or a code merge conflict). Swap `stage:ship` → `stage:build`, remove `sdlc:wip`, comment the

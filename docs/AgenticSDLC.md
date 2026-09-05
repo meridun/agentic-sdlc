@@ -68,9 +68,12 @@ merge-and-close. Multi-repo forks make the tail explicit; both forms conform.
    security defect bounces to build; an undecided product question bounces to intake, a spec gap to
    design; a risk
    tradeoff or a "the design itself is wrong" call PARKs to a human via `sdlc:needs-human`. A build
-   blocked by a dependency is a **readiness regression**, not a build failure: flip the item's
-   `ready` label to `blocked` and bounce it to `stage:queued`, so the human throttle gates
-   re-entry when the blocker clears — that gate is what stops a silent queued→build→queued loop.
+   blocked by a dependency is a **readiness regression**, not a build failure: record the
+   dependency as a **native issue-dependency edge** (the item *blocked by* the blocker — the
+   edge, not a label or a prose line, is what the dispatcher's eligibility gate reads; the
+   `blocked`/`ready` labels are derived from it) and bounce the item to `stage:queued`. The edge
+   keeps every lane from claiming the item while the blocker is open, and the human throttle
+   gates re-entry when it clears — that gate is what stops a silent queued→build→queued loop.
    Failures flow to accountability, not in a circle. **And every bounce loop is bounded:** if the
    same issue has already been bounced **twice** between the same two lanes for the same class of
    failure (count the lane's prior `sdlc:emit … BOUNCE` comments on the issue), the third pass

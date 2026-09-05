@@ -19,8 +19,37 @@ The pipeline is driven entirely by GitHub labels. Create these once per repo.
 | `priority:critical` | `#b60205` | Claimed first within a lane. |
 | `priority:medium` | `#fbca04` | Default priority. |
 | `priority:future` | `#c2e0c6` | Claimed last. |
-| `blocked` | `#d876e3` | *(optional)* Item bounced to queued as not-yet-buildable; readiness axis. |
-| `ready` | `#0e8a16` | *(optional)* Blocker cleared; complements `blocked`. |
+| `blocked` | `#d876e3` | *(derived, optional)* Has an **open native blocker**. Written by `sdlc deps --apply` from the dependency edges; never read by the machine. |
+| `ready` | `#0e8a16` | *(derived, optional)* Has dependency edges and every blocker is closed. Complements `blocked`; same derivation. |
+
+## Blocking: native issue dependencies are the source of truth
+
+An issue's readiness is a fact about **GitHub's native issue dependencies** (the *blocked by* /
+*blocking* relations on the issue — REST `issues/{n}/dependencies/{blocked_by,blocking}`, GraphQL
+`blockedBy` / `blocking`), not about its labels and not about prose in its body. The dispatcher's
+lane snapshot reads every open issue's `blockedBy` edges in one GraphQL pass and an issue with
+**any OPEN blocker is never eligible** for a worker to claim, in any lane — a fourth ineligibility
+bucket (`blocked`) beside hold, needs-human and wip. The gate is re-evaluated from live edge state
+every cycle, so the moment a blocker closes (its PR merges, or a human closes it) its dependents
+become claimable on the next cycle with no sweep, window or ack involved.
+
+`blocked` / `ready` are therefore **derived labels**: `sdlc deps --apply` (on every `cycle-prep
+--apply`) writes them from edge state so humans keep a readable readiness column, and the machine
+stops trusting them. Hand-flipping `blocked` → `ready` unblocks nothing; adding `blocked` by hand
+blocks nothing. The one ambiguity the lint surfaces rather than repairs is a `blocked` label with
+**no** edge at all: that is either a cross-repo block (native edges are per-repo — represent it
+as `sdlc:hold` plus prose) or a stale label; a human decides which.
+
+**Writing an edge** takes the blocker's numeric *id*, not its number:
+
+```bash
+BLOCKER_ID=$(gh api repos/{owner}/{repo}/issues/<blocker#> --jq .id)
+gh api -X POST repos/{owner}/{repo}/issues/<dependent#>/dependencies/blocked_by -F issue_id=$BLOCKER_ID
+```
+
+Prose (`Depends on #n`) may stay as a human mirror; it is no longer authoritative. Existing prose
+migrates once with `node tools/sdlc.mjs deps --migrate` (dry run; `--apply` creates the edges —
+see `docs/Adoption.md` §4b).
 
 ## Exactly one stage label per open issue
 
@@ -68,9 +97,9 @@ gh label create "priority:critical" --color b60205 --description "Claimed first 
 gh label create "priority:medium"   --color fbca04 --description "Default priority" --force
 gh label create "priority:future"   --color c2e0c6 --description "Claimed last" --force
 
-# optional readiness axis
-gh label create "blocked" --color d876e3 --description "Not yet buildable (bounced to queued)" --force
-gh label create "ready"   --color 0e8a16 --description "Blocker cleared" --force
+# optional readiness axis — DERIVED from native issue dependencies by `sdlc deps --apply`
+gh label create "blocked" --color d876e3 --description "Has an open native blocker (derived — edit the dependency, not the label)" --force
+gh label create "ready"   --color 0e8a16 --description "Every native blocker closed (derived)" --force
 ```
 
 No dispatcher-lock issue exists in this model: there is no dispatcher singleton. Overlapping

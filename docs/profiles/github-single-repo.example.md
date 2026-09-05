@@ -40,6 +40,6 @@ the project name is genericized to `acme`. Bindings per [Composability.md](../Co
   `db/migrations/` with `dbmate down` / `dbmate up` and schema dump `db/schema.sql` (verify
   migration checks + audit diff-shape check).
 - **Deterministic core:** `tools/sdlc.mjs` — owns claim/emit/advance transition validation, the
-  wip gate, the maintenance lock, the merge-sweep work-list/ack, and the cycle-prep report.
+  wip gate, the maintenance lock, the native-dependency eligibility gate + derived readiness labels (`deps`), the close-sweep work-list/ack, and the cycle-prep report.
 - **Known deviations from spec:** none — this is the template's own default shape, declared so
   drift audits have a baseline to diff against.

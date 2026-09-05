@@ -77,13 +77,49 @@ each new worktree's `node_modules` to the main checkout's install (see the share
 to it: wherever a prompt describes the claim lock, outcome emit, stage swap, or dispatcher gate
 ritual, have
 workers run the CLI one-shot instead
-(`node tools/sdlc.mjs claim|emit|advance|gate|cycle-prep|maint-lock|lanes|…`).
+(`node tools/sdlc.mjs claim|emit|advance|gate|cycle-prep|maint-lock|lanes|deps|…`).
 
 Why bother: `advance` validates every transition against the stage graph, which kills the
 hand-typed label-typo class (`stage:verfy`) by construction, and it makes the gate, machine
 maintenance lock, and claim-verify race check deterministic — the agent supplies judgment (what to
 spawn, what to write in comments), the CLI supplies the state math. The pure helpers are exported and the
 gh/git executors injectable, so you can unit-test your adaptations without touching GitHub.
+
+The dependency gate needs `gh` ≥ 2.86 (native issue-dependency fields in GraphQL) and a token
+with `repo` scope; on a failure the `lanes` / `cycle-prep` report says `deps: edge query FAILED`
+and that cycle degrades to the label-only gate rather than aborting.
+
+### 4b. Migrate prose dependencies to native edges (once, on adoption)
+
+Blocking is read from GitHub's **native issue dependencies** (see `docs/Labels.md`), so a backlog
+whose dependencies live in prose (`Depends on #n`, `Blocked by #n`) and a hand-kept `blocked`
+label is invisible to the gate until migrated. The migration is a dry run by default:
+
+```bash
+node tools/sdlc.mjs deps --migrate
+```
+
+It parses only **line-leading** declarations (`Depends on #12`, `- Blocked by: #13, #14`,
+`**Requires** #15`, `After #16`) — narrative mentions such as "None depends on #1337" never
+propose an edge — and prints one `#dependent blocked_by #blocker (OPEN|CLOSED)` line per proposed
+edge (edges to closed blockers are harmless and make `ready` derivable), plus a `skipped` line for
+a reference that isn't an issue in this repo (deleted, transferred, or cross-repo — native edges
+are per-repo; keep those as `sdlc:hold` + prose). Review the list, then create the edges:
+
+```bash
+node tools/sdlc.mjs deps --migrate --apply
+```
+
+Then run the derived-label pass and read its lint:
+
+```bash
+node tools/sdlc.mjs deps --apply
+```
+
+`deps` rewrites `blocked` / `ready` from edge state (it does this on every `cycle-prep --apply`
+from now on) and lists what it will not repair: `label-only-blocked` (a `blocked` label with no
+edge — drop the label or add the edge by hand) and `cycle` (a dependency cycle — cut an edge).
+Prose lines may stay as a human mirror; the edge is authoritative from here.
 
 ### 4a. Lint ratchet for repos with a backlog (optional)
 

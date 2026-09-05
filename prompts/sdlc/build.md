@@ -83,9 +83,14 @@ usually sound; most build failures are implementation or readiness, not "the des
   filled), which tests pass, and what verify should aim its real-run / integration pass at.
 - **BOUNCE → `stage:queued`** *(the common bounce)* — the item turned out **not ready**: blocked by a
   dependency that must land first, or otherwise not buildable *yet* though the design is fine. This
-  is a **readiness regression**: swap the label back, remove `sdlc:wip`, flip the issue's `ready`
-  label to `blocked` (add `blocked` if neither is present), comment the blocker (link the blocking
-  issue). The human throttle gates re-admission — which is what stops a silent queued→build→queued loop.
+  is a **readiness regression**: swap the label back, remove `sdlc:wip`, and **record the
+  dependency as a native edge** — this issue *blocked by* the blocking issue
+  (`gh api -X POST repos/{owner}/{repo}/issues/<this#>/dependencies/blocked_by -F issue_id=$(gh api
+  repos/{owner}/{repo}/issues/<blocker#> --jq .id)`; the blocker's numeric *id*, not its number).
+  Comment the blocker (link it) as the human mirror. The edge — not a `blocked` label, which the
+  dispatcher derives from it — is what keeps the item out of every lane until the blocker closes;
+  the human throttle then gates re-admission, which is what stops a silent queued→build→queued
+  loop. A blocker in another repo can't be an edge: `sdlc:hold` + the prose line instead.
 - **BOUNCE → `stage:design`** — the reviewed plan **can't be executed as written**: a spec gap the
   plan never resolved, an internal contradiction, or the plan is **materially invalidated** (spec
   rot per the WORK check, or a wrong assumption discovered mid-build). Swap `stage:build` →

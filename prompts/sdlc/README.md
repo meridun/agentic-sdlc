@@ -245,12 +245,31 @@ their own body sections and always preserve the original author text at the top.
 | File | Stage | Notes |
 |---|---|---|
 | [`dispatch.md`](dispatch.md) | *(dispatcher — runs every lane)* | scheduled task; git/worktree maintenance + per-lane fan-out |
-| [`intake.md`](intake.md) | `stage:intake` → `stage:design` *(or `stage:verify`, already-built floor)* | triage, dedup, requirements + AC authoring, decision debates + merge sweep |
+| [`intake.md`](intake.md) | `stage:intake` → `stage:design` *(or `stage:verify`, already-built floor)* | triage, dedup, requirements + AC authoring, decision debates + close sweep |
 | [`design.md`](design.md) | `stage:design` → `stage:queued` | standard phase: implementation plan (spec track) for every item; optional UX track |
 | [`build.md`](build.md) | `stage:build` → `stage:verify` | execute the reviewed plan → implement + targeted tests |
 | [`verify.md`](verify.md) | `stage:verify` → `stage:audit` | full suite + real-run smoke |
 | [`audit.md`](audit.md) | `stage:audit` → `stage:ship` | read-only security/invariant review of the diff |
 | [`ship.md`](ship.md) | `stage:ship` → *(closed on merge)* | docs fan-out + open PR |
 
-`intake` additionally runs a **merge sweep** every pass (its step 0): post-merge cascade-unblock for
-issues closed by merged PRs, since ship ends at "PR open" and the merge itself fires no worker.
+`intake` additionally runs a **close sweep** every pass (its step 0): post-close bookkeeping for
+the open issues a just-closed issue was blocking, since ship ends at "PR open" and the merge
+itself fires no worker.
+
+## Dependencies — native edges, never prose or labels
+
+An issue that can't proceed until another lands is recorded as a **GitHub native issue-dependency
+edge** (this issue *blocked by* that one), by whichever lane discovers it — intake's collision
+sweep, design's plan ordering / epic split, build's readiness-regression bounce:
+
+```
+gh api -X POST repos/{owner}/{repo}/issues/<this#>/dependencies/blocked_by \
+  -F issue_id=$(gh api repos/{owner}/{repo}/issues/<blocker#> --jq .id)
+```
+
+(the blocker's numeric *id*, not its number). The dispatcher's eligibility gate reads those edges:
+an issue with any open blocker is claimable in **no** lane, and becomes claimable on the cycle
+after its last blocker closes. A `Depends on #n` line is a human mirror it ignores; the
+`blocked` / `ready` labels are **derived** from the edges by `sdlc deps --apply` each cycle and
+are never read by the machine — so never set them by hand as a substitute for the edge. Native
+edges are per-repo: a cross-repo blocker is `sdlc:hold` + the prose line, stated in the comment.
