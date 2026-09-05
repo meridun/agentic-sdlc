@@ -89,11 +89,14 @@ The dependency gate needs `gh` ≥ 2.86 (native issue-dependency fields in Graph
 with `repo` scope; on a failure the `lanes` / `cycle-prep` report says `deps: edge query FAILED`
 and that cycle degrades to the label-only gate rather than aborting.
 
-### 4b. Migrate prose dependencies to native edges (once, on adoption)
+### 4b. Migrate prose dependencies to native edges (on adoption, then every cycle)
 
 Blocking is read from GitHub's **native issue dependencies** (see `docs/Labels.md`), so a backlog
 whose dependencies live in prose (`Depends on #n`, `Blocked by #n`) and a hand-kept `blocked`
-label is invisible to the gate until migrated. The migration is a dry run by default:
+label is invisible to the gate until migrated. Run it by hand once on adoption to review the
+proposals; afterwards `cycle-prep` runs the same pass every cycle (its `=== deps-migrate ===`
+section, applied under `--apply`) so prose on newly filed issues is converted without waiting
+for intake. The migration is a dry run by default:
 
 ```bash
 node tools/sdlc.mjs deps --migrate

@@ -128,6 +128,14 @@ no sweep, window or ack is involved in gating. If the edge query fails (the repo
 record it in the digest and don't spawn `stage:build`+ workers for items whose body names an
 unmerged blocker until the next cycle can read edges again.
 
+**`=== deps-migrate ===` — prose declarations → native edges, every cycle.** `sdlc deps --migrate
+--apply` (part of `cycle-prep --apply`; dry run without it) converts line-leading `Depends on #n`
+/ `Blocked by #n` / `**Dependencies:** …` lines in open-issue bodies into `blocked_by` edges, so
+an issue filed between cycles with prose dependencies is gated from its first cycle rather than
+waiting for intake to convert it. Idempotent (an existing edge is skipped); a reference that isn't
+an issue in this repo is logged as `skipped` and stays prose. It runs *before* `=== deps ===` so
+a freshly created edge is labelled `blocked` the same cycle.
+
 **`=== deps ===` — derived readiness labels + lint.** `sdlc deps --apply` (part of `cycle-prep
 --apply`) writes the `blocked` / `ready` labels *from* edge state each cycle — open blocker →
 `blocked`; edges all closed → `ready` — so humans keep a readable readiness column the machine
