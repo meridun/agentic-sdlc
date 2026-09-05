@@ -90,6 +90,16 @@ are neither. Headings:
   - **Test strategy**: the test cases (named surfaces + what each proves), unit vs integration.
   - **Out of scope**: what this deliberately does not do.
 
+**Ordering is an edge, not a sentence.** If the plan requires another open issue to land first
+(a provider this consumes, a split-off predecessor, a migration another item owns), record it as
+a **native issue-dependency edge** — this issue *blocked by* that one:
+`gh api -X POST repos/{owner}/{repo}/issues/<this#>/dependencies/blocked_by -F issue_id=$(gh api
+repos/{owner}/{repo}/issues/<blocker#> --jq .id)` (the blocker's numeric *id*, not its number).
+The same applies when you split an epic into ordered children: each later child *blocked by* the
+one before it. The dispatcher's eligibility gate reads those edges (it never reads a `Depends on
+#n` line or a `blocked` label — both are human mirrors it derives or ignores), so an ordering
+that lives only in prose is an ordering the pipeline will violate on the next cycle.
+
 Design-exempt items get a **spec-lite** — the same headings, roughly a line each. That's the
 whole cost of the standard phase for a bug fix; don't inflate it.
 

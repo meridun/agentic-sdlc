@@ -88,7 +88,7 @@ one command each way: `node tools/sdlc.mjs maint-lock <run-id>` (exit 1 = held; 
 
 **`cycle-prep` — the whole pre-dispatch sequence in one shot.** Where the reference CLI provides
 it, the fixed, zero-judgment sequence of Steps -1/0/0a (mint → maint-lock → lanes → gate --reap →
-sweep → git-maint → worktree-sweep → conflict-scan → maint-release) collapses into **one
+deps → sweep → git-maint → worktree-sweep → conflict-scan → maint-release) collapses into **one
 command**: `node tools/sdlc.mjs cycle-prep --apply`. It mints the run-id internally and prints it
 verbatim on a `run-id: <id>` line — capture that line as the cycle's **single source of truth** —
 plus a `started: <iso>` line for the digest's wall-clock duration, and emits one delimited,
@@ -111,9 +111,31 @@ From it compute locally: `sdlc:wip` items, per-lane depths, the `sdlc:needs-huma
 lists, each lane's candidate list for the worker prompts (per-lane dispatch step 2 — `createdAt`
 is what workers FIFO-order candidates by), and each open issue's `stage:*` label count (Step 0b).
 With the reference CLI, the `=== lanes ===` section of the `cycle-prep` report carries all of
-this: per-lane depths, CLAIM-ordered eligibility (with a `(hold N, needs-human N, wip N)`
+this: per-lane depths, CLAIM-ordered eligibility (with a `(hold N, needs-human N, wip N, blocked N)`
 ineligibility breakdown when a lane's depth exceeds its eligible count — so a snapshot bug is
-distinguishable from expected ineligibility), and the ≠1-stage-label list.
+distinguishable from expected ineligibility), a `blocked (open native blockers): #c ← #a, #b`
+line naming each blocked item's open blockers, and the ≠1-stage-label list.
+
+**Blocking is read from GitHub's native issue dependencies, never from labels or prose.** The
+snapshot includes every open issue's `blockedBy { number state }` edges (one GraphQL pass —
+`gh api graphql` over `repository.issues(states:OPEN)`; the `blocked-by:` search qualifier does
+not return results, so don't use `gh issue list --search` for this). An issue with any **OPEN**
+blocker is ineligible in every lane this cycle — leave it out of the candidate list exactly like
+a wip or parked item. The check is re-evaluated from live edge state every cycle, so a blocker
+whose PR merged (or that a human closed) unblocks its dependents on the next cycle automatically;
+no sweep, window or ack is involved in gating. If the edge query fails (the report says
+`deps: edge query FAILED … blocked gate NOT applied`), the cycle degrades to the label-only gate:
+record it in the digest and don't spawn `stage:build`+ workers for items whose body names an
+unmerged blocker until the next cycle can read edges again.
+
+**`=== deps ===` — derived readiness labels + lint.** `sdlc deps --apply` (part of `cycle-prep
+--apply`) writes the `blocked` / `ready` labels *from* edge state each cycle — open blocker →
+`blocked`; edges all closed → `ready` — so humans keep a readable readiness column the machine
+never trusts. Its `LINT` lines go in the digest verbatim: `label-only-blocked` (a `blocked` label
+with no edge — a stale label or a cross-repo block that must be `sdlc:hold` + prose; a human
+picks) and `cycle` (a dependency cycle among open issues — nothing in it can ever become eligible
+until a human cuts an edge). Auto-repair covers only the unambiguous label cases; the lint is
+never repaired by automation.
 
 For each `sdlc:wip` item, fetch its most recent `sdlc:claim` comment (that comment's timestamp and
 run-id are the lock's age and owner — do NOT use `updatedAt`, which any comment resets):
@@ -258,15 +280,17 @@ the human throttle):
    after it returns — a worker mid-test-suite or mid-push would be cut off. Each worker's final
    message is its deliverable; pull it when the batch completes — never re-spawn a finished worker
    to "resend" a result. Exception: run
-   intake before the batch when its merge sweep has pending merges to process — check the sweep
+   intake before the batch when its close sweep has pending closes to process — check the sweep
    state **read-only** (the `cycle-prep` report's `=== sweep ===` section, or
    `node tools/sdlc.mjs sweep`): anything other than `sweep: clear` means pending, and peeking
    never consumes the work-list — only the intake worker's post-processing `sweep --ack` marks
-   merges swept. Also run a lane serially
+   closes swept. Also run a lane serially
    after the batch if it only became non-empty via an ADVANCE this cycle. Never spawn two workers for
-   the same lane in one cycle. The intake-first exception is load-bearing: intake's merge sweep is the
-   only thing that processes merged PRs, so skipping intake because its lane looks empty would skip the
-   merge sweep entirely — run it whenever merges are pending, even with zero `stage:intake` items.
+   the same lane in one cycle. The intake-first exception is still worth keeping: the eligibility
+   gate (Step 0) already unblocks dependents from edge state without intake, so a skipped sweep no
+   longer lets a blocked item be claimed — but intake's close sweep is the only thing that posts
+   the "blocker landed" comments and updates the human mirrors (body strikethrough, roadmap lines),
+   so run it whenever closes are pending, even with zero `stage:intake` items.
    Other dispatch runs may have live workers in the same lanes right now — that's expected: workers
    deconflict per issue (CLAIM step 3), and a worker that loses a claim race just moves to the next
    eligible item. A lost race is never an error.

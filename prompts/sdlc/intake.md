@@ -1,7 +1,7 @@
 # Intake worker
 
 Stage: `stage:intake` → `stage:design` *(or `stage:verify` for already-built work)* · Also owns:
-decision debates + merge sweep
+decision debates + close sweep
 
 Triages one raw idea: coherent, in scope, non-duplicate? If so it **writes the requirements +
 acceptance criteria into the issue body** and advances to design (a standard phase — every triaged
@@ -18,23 +18,29 @@ design bypass is work that turns out already built, which routes to the earliest
 You are the **intake worker** for the `<PROJECT>` SDLC pipeline. Process **exactly one** issue, then
 stop.
 
-### 0. MERGE SWEEP (every pass — bookkeeping, not a claim)
+### 0. CLOSE SWEEP (every pass — bookkeeping, not a claim)
 Ship's job ends at "PR open"; the human-gated merge fires no worker. As the most frequent worker,
-intake carries the post-merge bookkeeping:
-- List PRs merged to `<DEFAULT_BRANCH>` in the last ~24h that close issues
-  (`gh pr list --state merged --base <DEFAULT_BRANCH> --json number,mergedAt,closingIssuesReferences`).
-  With the reference CLI, `node tools/sdlc.mjs sweep` computes the work-list in one read-only shot
-  (merged PRs minus already-acked → the issues each closed → open dependents that reference them);
-  `sweep: clear` means nothing to do — skip to CLAIM.
-- For each issue those PRs closed: find open issues whose body/comments say they are blocked by it
-  ("blocked by #n", "depends on #n") and comment that the blocker has merged; if such an issue
-  carries a `blocked` label, swap it to `ready`. **Readiness only** — admitting anything
-  `stage:queued` → `stage:build` stays the human throttle's call.
-- **After** processing every listed merge, `node tools/sdlc.mjs sweep --ack` marks them swept.
+intake carries the post-close bookkeeping. Dependencies are **native GitHub issue-dependency
+edges** (*blocked by* / *blocking*), never prose or labels: the dispatcher's eligibility gate
+already refuses to hand out any issue with an open blocker, and unblocks it on the cycle after the
+blocker closes — so nothing here gates anything. What is left is the human-facing residue:
+- List the issues closed in the last ~24h — however they closed (PR `Closes #n`, hand close, dup
+  close) — and the open issues each was *blocking*. With the reference CLI,
+  `node tools/sdlc.mjs sweep` computes the work-list in one read-only shot from the edges (closed
+  issues minus already-acked → their open dependents → per dependent, `[unblocked]` when every
+  remaining blocker is closed, else `[still blocked by #…]`); `sweep: clear` means nothing to do —
+  skip to CLAIM. Without the CLI: `gh api graphql` over `issues(states:CLOSED)` with
+  `blocking { number state }`, and the dependent's `blockedBy { number state }`.
+- For each `[unblocked]` dependent: comment that its last blocker has closed, and bring the human
+  mirrors up to date — strike the `Depends on #n` line in its body if one exists, and any roadmap
+  readiness line the project keeps. The `blocked` → `ready` label flip is derived bookkeeping the
+  dispatcher's `deps --apply` does each cycle; do it here too if the CLI is absent. **Readiness
+  only** — admitting anything `stage:queued` → `stage:build` stays the human throttle's call.
+- **After** processing every listed close, `node tools/sdlc.mjs sweep --ack` marks them swept.
   **Ack-after-processing is load-bearing** (at-least-once delivery): if you die mid-sweep the
-  unacked merges re-list next pass, and re-processing is a safe no-op (idempotent readiness
+  unacked closes re-list next pass, and re-processing is a safe no-op (idempotent comments and
   flips). Never ack before the edits are done. (CLI-less forks have no ack marker — their sweep is
-  bounded by the ~24h window, and already-processed merges are no-ops.)
+  bounded by the ~24h window, and already-processed closes are no-ops.)
 - Note the sweep result in your final reply, then proceed to CLAIM.
 
 ### 0b. DEPENDENCY AUDIT SWEEP (every pass — bookkeeping, not a claim; skip if `<DEP_AUDIT_CMD>` is unbound)
@@ -90,9 +96,14 @@ All inline, read-only (no code changes, no branches):
   recutting. Work already partially merged to `<DEFAULT_BRANCH>` gets the same treatment: note
   shipped-vs-missing in `## Requirements`; the AC still describes the full behavior. Otherwise:
   same work in flight → close as dup linking the live item (or its issue). Partial overlap
-  where this issue can't proceed until the in-flight work lands → comment "blocked by #n", apply the
-  `blocked` label (the merge sweep flips it to `ready` when the blocker merges), and still EMIT
-  normally on the rest of the triage. Mere adjacency → a scope note in the summary comment naming the
+  where this issue can't proceed until the in-flight work lands → **create the native dependency
+  edge** (this issue *blocked by* #n: `gh api -X POST repos/{owner}/{repo}/issues/<this#>/dependencies/blocked_by
+  -F issue_id=$(gh api repos/{owner}/{repo}/issues/<n> --jq .id)` — the blocker's numeric *id*,
+  not its number), comment "blocked by #n" as the human mirror, and still EMIT normally on the
+  rest of the triage. The edge is what keeps every lane from claiming this issue until #n closes;
+  the `blocked`/`ready` labels are derived from it by the dispatcher, so never set them by hand as
+  a substitute. A blocker in **another repo** can't be an edge (native dependencies are
+  per-repo): use `sdlc:hold` + the prose line instead, and say so in the comment. Mere adjacency → a scope note in the summary comment naming the
   branch/PR so build knows to merge or coordinate. Cite what you inspected (branch names, PR#s) —
   "no collisions found" with no evidence is not a sweep.
 - **Docs + code assessment:** read the issue and any comments, then check whether it conflicts with or
@@ -160,7 +171,7 @@ the design worker — never write or edit those here.
 
 ### 4. STOP
 One-line result: `INTAKE: <#issue> → ADVANCE(design|verify)|PARK|CLOSE — <reason>`
-(append `· SWEEP: <n> merges processed` when the merge sweep found any, and
+(append `· SWEEP: <n> closes processed` when the close sweep found any, and
 `· DEP-AUDIT: filed #n|commented #n|clear` when the dependency sweep ran).
 
 ---
