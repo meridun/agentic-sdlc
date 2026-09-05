@@ -26,20 +26,31 @@ The framework is delivered in three layers of decreasing normativity. Every proj
 
 1. **Normative spec** (`docs/` here) — the invariants, the lifecycle spine, and the variation-point
    contracts below. This is the only layer every fork must conform to.
-2. **Reference prompts and contracts** (`prompts/sdlc/`, `agents/sdlc-worker.md`) — portable text.
-   A fork with write access copies the trees (per [Adoption.md](Adoption.md)); a **read-only
+2. **Reference prompts and contracts** — portable text, itself in three layers inside the one
+   copyable tree `sdlc/` ([`sdlc/README.md`](../sdlc/README.md)):
+   - **core** (`sdlc/README.md`, `sdlc/lanes/`, `sdlc/dispatch.md`, `agents/sdlc-worker.md`) —
+     names every tracker/code-host need as an abstract operation and every project-specific value
+     as a `<KEY>`; copied unedited;
+   - **bindings** (`sdlc/bindings/<name>/BINDING.md`) — one per substrate, each filling the
+     operation contract in [`sdlc/bindings/README.md`](../sdlc/bindings/README.md): `gh-issue`,
+     `ado-feature`, `ado-pbi`; picked, not edited;
+   - **profile** (`sdlc/PROFILE.md`) — the fork's bindings and keys; the only file a fork writes.
+   A fork with write access copies the tree (per [Adoption.md](Adoption.md)); a **read-only
    consumer transcribes**: an agent reads this repo, compares against the local implementation,
    and ports the contract language by hand into whatever the local harness accepts (Copilot agent
    files, ADO wiki, dispatch prompts).
-3. **Reference executable core** (`tools/sdlc.mjs`, or a project's own `sdlc` CLI / `sdlc.ps1`) —
-   optional determinism. Deterministic state math (transition validation, claim/gate/lock rituals)
-   is strongly recommended where installable, and explicitly *not required* for conformance —
-   the work fork substitutes its own `sdlc.ps1` implementing the same operations.
+3. **Reference executable core** (the `gh-issue` binding's `sdlc.mjs`, or a project's own `sdlc`
+   CLI / `sdlc.ps1`) — optional determinism. Deterministic state math (transition validation,
+   claim/gate/lock rituals) is strongly recommended where installable, and explicitly *not
+   required* for conformance — the work fork substitutes its own `sdlc.ps1` implementing the same
+   operations, keyed by the same operation names.
 
-**Upstream sync is manual and ad hoc.** There is no version negotiation: when a fork learns
-something, port it here by hand; when this spec improves, port it outward when convenient. The
-conformance profile (below) is what makes an ad-hoc "diff my fork against the spec" pass cheap to
-run with an agent.
+**Upstream sync is manual, but mechanical.** There is no version negotiation: when a fork learns
+something, port it here by hand; when this spec improves, port it outward when convenient. Because
+core and binding files are copied unedited, porting outward is an overwrite from a newer tag plus
+a `SPEC_VERSION` bump in the profile; the conformance profile (below) is what makes an ad-hoc
+"diff my fork against the spec" pass cheap to run with an agent. This repo tags releases
+(`vMAJOR.MINOR.PATCH`); a profile records the tag it was written against.
 
 ## The canonical lifecycle spine
 
@@ -82,9 +93,11 @@ binding the contract, not by rewriting the spine.
 
 ### VP1 — Tracker backend
 
-The spec's state machine needs, from any tracker, exactly these operations:
+The spec's state machine needs, from any tracker, exactly these capabilities (the executable
+form — `claim`, `emit`, `dep-edge`, … — is the operation table in
+[`sdlc/bindings/README.md`](../sdlc/bindings/README.md), which each shipped binding fills):
 
-| Abstract operation | GitHub binding (template) | ADO binding (work) |
+| Abstract operation | `gh-issue` binding (template) | `ado-feature` binding (work) |
 |---|---|---|
 | stage marker (exactly one) | `stage:*` label | `stage:*` tag on the Feature (native States stay coarse/derived) |
 | routing marker | repo labels / single repo | exactly one `repo:*` tag per child |
@@ -103,7 +116,7 @@ dialect. The abstract operation names are the shared vocabulary for cross-fork c
 
 1. **Deterministic contention resolution** — either an *append-only, server-timestamped* record
    (GitHub claim comments; requires the claim-verify + boundary ritual of
-   `prompts/sdlc/README.md`), or a *compare-and-swap* write (e.g. an ADO PATCH tested against
+   the `gh-issue` binding), or a *compare-and-swap* write (e.g. an ADO PATCH tested against
    `System.Rev` — on a field or on a child Task's description), which serializes claims at the
    tracker and collapses the claim-verify ritual entirely.
 2. **Provable age and owner from server-side data** — a comment timestamp, a field revision, or a
@@ -199,36 +212,46 @@ per-fork by design and per-*repo* within a multi-repo fork (each child PBI verif
 repo's bar). The stage semantics ("verify proves it works", "audit reviews security + invariants +
 contracts + docs + merge order") are fixed; what proof consists of is the fork's declaration.
 A fork with an inherited lint backlog may bind `<LINT_CMD>` to the reference **ratchet**
-(`tools/check-lint-baseline.mjs`: no growth vs a committed per-rule baseline + touched files
-clean) rather than "lint clean" — declare which in the profile so the gate is auditable.
+(`sdlc/tools/check-lint-baseline.mjs`: no growth vs a committed per-rule baseline + touched
+files clean) rather than "lint clean" — declare which in the profile so the gate is auditable.
 
 ## The conformance profile
 
-Each fork keeps one file — `prompts/sdlc/PROFILE.md` (suggested, co-located with the fork's
-prompts) — stating its bindings. This is the
-artifact that makes read-only consumption and ad-hoc drift audits work: an agent with read access
-to both repos can diff a profile against this spec mechanically.
+Each fork keeps one file — `sdlc/PROFILE.md`, filled from the shipped template
+([`sdlc/PROFILE.md`](../sdlc/PROFILE.md)) — stating its bindings. It is **externalized
+configuration**, not documentation: every `<KEY>` a core prompt names resolves at runtime to a row
+of the profile's § Keys, and `BINDING` names which `bindings/<name>/BINDING.md` resolves the
+abstract operations. That is what lets the core and binding files be copied unedited — and what
+makes read-only consumption and ad-hoc drift audits work: an agent with read access to both
+repos can diff a profile against this spec mechanically.
 
 ```markdown
-# SDLC conformance profile: <project>
+# SDLC profile: <project>
+Spec version: <framework tag>
+## Keys
+| BINDING | gh-issue | ado-feature | ado-pbi |
+| SDLC_CLI | … or none |
+| PROJECT · REPO_PATH · WORKER_AGENT · DEFAULT_BRANCH · PROD_BRANCH · WORKTREE_ROOT | … |
+| BUILD_CMD · TEST_CMD · FULL_SUITE_CMD · LINT_CMD · SMOKE_CMD | … |
+| LANG_CONVENTIONS · INVARIANTS · DECISION_RECORD · DOCS_SINKS | … |
+| optional: DESIGN_ARTIFACTS · KNOWN_ENV_LIMITS · DEP_AUDIT_CMD · MIGRATIONS_DIR (+ down/up/dump) · DOCS_ROOT · DOC_DOMAINS · TOKEN_TOOL | unbound = the lane step is skipped |
+## Variation points
 - Spine: intake → design → queued → build → verify → audit → ready → shipping → complete
   (or the collapsed tail)
-- VP1 tracker: <GitHub labels | ADO tags+links> — binding table or link
-- VP2 topology: <single-repo | multi-repo Feature/child> — routing tags if multi
-- VP3 modules: design UX track <off | bound: `<DESIGN_ARTIFACTS>` conventions + trigger>,
-  PSI lane <on/off>, others
+- VP1 tracker: per the binding — anything bound differently
+- VP2 topology: <single-repo | multi-repo Feature/child> — routing markers if multi
+- VP3 modules: design UX track <off | bound: conventions + trigger>, PSI lane <on/off>, others
 - VP4 dispatcher: <trigger, maintenance-lock representation, worker isolation>
-- VP5 quality bars: per repo — test / full-suite / smoke / lint / invariants / known env limits /
-  docs sinks / dep-audit cmd / migrations dir + down/up cmds + schema dump (optional knobs;
-  unbound = the lane step is skipped)
-- Deterministic core: <none | tools/sdlc.mjs | sdlc.ps1 | sdlc CLI> and which rituals it owns
-- Known deviations from spec: <list, with why>
+- VP5 quality bars: per repo; which lint-gate form
+- Deterministic core: <none | sdlc.mjs | sdlc.ps1 | sdlc CLI> and which operations it owns
+## Known deviations from spec: <list, with why>
 ```
 
-Worked examples: [profiles/work-ado.example.md](profiles/work-ado.example.md) (multi-repo Azure
-DevOps, read-only consumer) and
-[profiles/github-single-repo.example.md](profiles/github-single-repo.example.md) (the minimal
-single-repo GitHub case with the reference CLI).
+Worked examples: [profiles/gh-issue.example.md](profiles/gh-issue.example.md) (the minimal
+single-repo GitHub case with the reference CLI),
+[profiles/ado-feature.example.md](profiles/ado-feature.example.md) (multi-repo Azure DevOps,
+read-only consumer), and [profiles/ado-pbi.example.md](profiles/ado-pbi.example.md) (the
+proposed single-repo ADO shape).
 
 The "known deviations" line is load-bearing: fork-per-project means divergence is legitimate, but
 *undeclared* divergence is drift. An audit pass = read profile, read spec, list deltas, file

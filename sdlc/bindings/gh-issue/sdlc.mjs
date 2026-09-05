@@ -50,7 +50,7 @@
  * The stage graph (forward pipeline edges + the documented bounces):
  *   intake → design → queued → build → verify → audit → ship
  * with `sdlc:wip` as the machine lock and `sdlc:needs-human` / `sdlc:hold` as
- * parks (see prompts/sdlc/README.md).
+ * parks (see sdlc/README.md).
  *
  * Blocking is a fourth ineligibility axis and its source of truth is GitHub's
  * NATIVE issue dependencies (blocked-by / blocking edges), read via GraphQL —
@@ -58,7 +58,7 @@
  * and never prose in a body (#27).
  *
  * Usage:
- *   node tools/sdlc.mjs <command> [args...]
+ *   node sdlc/bindings/gh-issue/sdlc.mjs <command> [args...]
  */
 
 import { execFileSync } from 'child_process';
@@ -89,7 +89,7 @@ export const STAGES = ['intake', 'design', 'queued', 'build', 'verify', 'audit',
 
 /**
  * Legal stage transitions: the forward pipeline edge(s) plus the documented
- * bounces from prompts/sdlc/. `ship` is terminal on ADVANCE (the ship worker
+ * bounces from sdlc/lanes/. `ship` is terminal on ADVANCE (the ship worker
  * opens a PR; the merge closes the issue) but may still bounce a late code
  * problem or merge conflict back to build. Any edge not listed here is
  * rejected — that is what fixes the label-typo class of bug.
@@ -279,7 +279,7 @@ export function planClaimVerify(comments, myRunId, boundaryIso = null) {
   return { won: winner.runId === myRunId, winner: winner.runId, reason: null };
 }
 
-/** Worker outcomes `sdlc emit` accepts (prompts/sdlc/README.md EMIT step). */
+/** Worker outcomes `sdlc emit` accepts (sdlc/README.md EMIT step). */
 export const EMIT_OUTCOMES = ['ADVANCE', 'BOUNCE', 'PARK', 'CONTINUE', 'CLOSE'];
 
 /**
@@ -715,7 +715,7 @@ export function unlinkWorktreeRootLinks(treePath, log = () => {}) {
  * junctioned worktree mutates the main checkout's `node_modules` (and every
  * other junctioned worktree). An issue that changes dependencies must unlink
  * first and install for real — see the share-don't-install rule in
- * `prompts/sdlc/README.md`. Creation-only: there is deliberately no repair
+ * `sdlc/README.md`. Creation-only: there is deliberately no repair
  * sweep over existing trees; they converge as they are swept and recreated.
  *
  * @param {string} root absolute path of the main checkout (the install to share)
@@ -1476,7 +1476,7 @@ function cmdClaim(args, { gh, git, log }) {
   let myCommentUrl = null;
   if (runId) {
     // The label is the visibility signal; this comment is the ownership record
-    // and race tiebreaker (see prompts/sdlc/README.md CLAIM).
+    // and race tiebreaker (see sdlc/README.md CLAIM).
     myCommentUrl = String(gh(['issue', 'comment', issue, '--body', `sdlc:claim ${runId} ${lane}`]) ?? '').trim();
   }
   if (verify) {
@@ -2556,7 +2556,7 @@ export function runSdlc(argv, deps = {}) {
     gh = defaultGh,
     git = defaultGit,
     log = (msg) => console.log(msg),
-    root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
+    root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..'),
     statSize,
   } = deps;
   const [command, ...rest] = argv;

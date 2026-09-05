@@ -36,7 +36,7 @@ Decide the sub-case first (idempotency — schedulers fire on a clock, not on ne
   its existing tests rather than starting parallel ones.
   The reviewed plan stands — don't re-plan unless the merge invalidated it (spec-rot check below).
 - **Nothing started** → implement:
-  - **Read the issue body's sections** — `## Requirements`, `## Acceptance criteria` (intake's),
+  - **Read the issue's artifact sections** — `## Requirements`, `## Acceptance criteria` (intake's),
     `## Design` and `## Implementation plan` (design's, human-reviewed at the queued gate), plus
     any `<DECISION_RECORD>` lines they cite. The plan carries the *decisions* (files, signatures,
     shapes, ordered steps, invariant impact); build's job is **expression** — the code itself.
@@ -61,7 +61,7 @@ Decide the sub-case first (idempotency — schedulers fire on a clock, not on ne
     (esp. undefined / external results), never assume single-user state. Don't touch unrelated files.
   - **Write/update tests for everything changed** and run them targeted yourself (`<TEST_CMD>`) until
     green, diagnosing failures. Run the lint gate (`<LINT_CMD>`) clean — where the project binds
-    it to the **ratchet** (`node tools/check-lint-baseline.mjs`: no new lint errors vs the
+    it to the **ratchet** (`node sdlc/tools/check-lint-baseline.mjs`: no new lint errors vs the
     committed per-rule baseline), the files you touched must *also* lint clean on their own
     (`npx eslint <files>`); the inherited backlog is grandfathered, growth is not. Do **not** run
     the full suite here — that's verify's job.
@@ -83,14 +83,12 @@ usually sound; most build failures are implementation or readiness, not "the des
   filled), which tests pass, and what verify should aim its real-run / integration pass at.
 - **BOUNCE → `stage:queued`** *(the common bounce)* — the item turned out **not ready**: blocked by a
   dependency that must land first, or otherwise not buildable *yet* though the design is fine. This
-  is a **readiness regression**: swap the label back, remove `sdlc:wip`, and **record the
-  dependency as a native edge** — this issue *blocked by* the blocking issue
-  (`gh api -X POST repos/{owner}/{repo}/issues/<this#>/dependencies/blocked_by -F issue_id=$(gh api
-  repos/{owner}/{repo}/issues/<blocker#> --jq .id)`; the blocker's numeric *id*, not its number).
-  Comment the blocker (link it) as the human mirror. The edge — not a `blocked` label, which the
-  dispatcher derives from it — is what keeps the item out of every lane until the blocker closes;
-  the human throttle then gates re-admission, which is what stops a silent queued→build→queued
-  loop. A blocker in another repo can't be an edge: `sdlc:hold` + the prose line instead.
+  is a **readiness regression**: swap the stage marker back, remove `sdlc:wip`, and **record
+  the dependency edge** — `dep-edge <this> <blocker>`, this issue *blocked by* the blocking
+  issue. Comment the blocker (link it) as the human mirror. The edge — not a derived `blocked`
+  marker — is what keeps the item out of every lane until the blocker closes; the human throttle
+  then gates re-admission, which is what stops a silent queued→build→queued loop. A blocker the
+  tracker can't link: `sdlc:hold` + the prose line instead.
 - **BOUNCE → `stage:design`** — the reviewed plan **can't be executed as written**: a spec gap the
   plan never resolved, an internal contradiction, or the plan is **materially invalidated** (spec
   rot per the WORK check, or a wrong assumption discovered mid-build). Swap `stage:build` →
@@ -131,4 +129,4 @@ One-line result:
   unless the comment or your own check says otherwise.
 - **Targeted tests only.** Full suite, integration, and a real run belong to verify; build proves the
   unit-level wiring it changed. The PR is ship's job, not build's.
-- Honors the universal worker loop in [`README.md`](README.md).
+- Honors the universal worker loop in [`../README.md`](../README.md).

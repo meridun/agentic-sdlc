@@ -1,4 +1,4 @@
-// Tests for tools/check-lint-baseline.mjs — zero-dependency, node's built-in runner:
+// Tests for sdlc/tools/check-lint-baseline.mjs — zero-dependency, node's built-in runner:
 //   node --test "test/*.test.mjs"
 // The "committed baseline passes on the live tree" assertion is deliberately
 // CI's job in an adopting repo, not a unit test here: this template has no
@@ -21,7 +21,7 @@ import {
   parseArgs,
   lintRepo,
   total,
-} from '../tools/check-lint-baseline.mjs';
+} from '../sdlc/tools/check-lint-baseline.mjs';
 
 describe('check-lint-baseline: aggregateCounts', () => {
   it('counts error-severity messages per rule id', () => {

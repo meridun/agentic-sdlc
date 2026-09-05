@@ -12,7 +12,7 @@ description: Create or update long-form documentation under the docs root follow
 - Reviewing documentation changes for compliance
 
 This is the discipline the **ship** stage's docs fan-out routes to when the sink is
-architecture/reference documentation (see `prompts/sdlc/ship.md`). It keeps `<DOCS_SINKS>` from
+architecture/reference documentation (see `sdlc/lanes/ship.md`). It keeps `<DOCS_SINKS>` from
 drifting into a flat pile of overlapping files.
 
 ## Documentation tiers

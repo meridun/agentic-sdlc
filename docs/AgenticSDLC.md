@@ -86,7 +86,7 @@ merge-and-close. Multi-repo forks make the tail explicit; both forms conform.
 - `stage:intake` · `stage:design` · `stage:build` · `stage:verify` · `stage:audit` · `stage:ship`
   — the lane an issue is in. **Exactly one per open issue** — the dispatcher's integrity check
   auto-repairs a zero-stage issue to `stage:intake` and parks a multi-stage one (see
-  [Labels.md](Labels.md)).
+  [the gh-issue binding's labels.md](../sdlc/bindings/gh-issue/labels.md)).
 - `stage:queued` — **workerless**. The human throttle between design and build: the only gate a human
   must open by hand. What the human reviews there is design's `## Implementation plan` in the issue
   body — approving an *approach*, not just an idea (rejecting a wrong approach at queued costs one
@@ -101,7 +101,7 @@ merge-and-close. Multi-repo forks make the tail explicit; both forms conform.
 - `priority:critical` › `priority:medium` › `priority:future` — CLAIM order within a lane, then FIFO by
   creation date.
 
-Full `gh`-scriptable list: [Labels.md](Labels.md).
+Full `gh`-scriptable list: [the gh-issue binding's labels.md](../sdlc/bindings/gh-issue/labels.md).
 
 ## Concurrency variants
 
@@ -121,7 +121,7 @@ The template ships the **per-issue** model. A simpler **serial** model exists �
   install to run `<TEST_CMD>` / `<LINT_CMD>`, but a per-tree install is minutes and gigabytes each.
   So the convention is **one root-level `node_modules` junction** (Windows junction — no admin
   needed; a plain directory symlink elsewhere) pointing at the main checkout's install. Both halves
-  are exported, tested helpers in `tools/sdlc.mjs`: `linkWorktreeNodeModules` creates it in the
+  are exported, tested helpers in the gh-issue binding's `sdlc.mjs`: `linkWorktreeNodeModules` creates it in the
   `worktree` command right after `git worktree add` (idempotent — it never replaces a real
   `node_modules` or a dangling link, and a link failure logs but never fails worktree creation),
   and `unlinkWorktreeRootLinks` removes the link — never its target — before `git worktree
@@ -148,7 +148,7 @@ replace Step 0's per-issue gate with the global abort-or-reap, and run the per-l
 
 **Every triaged item passes through `stage:design`** (the only bypass is work intake finds already
 built, which routes to the earliest absent artifact, floor `stage:verify`). The lane runs two
-tracks with deliberately different human seams (`prompts/sdlc/design.md`):
+tracks with deliberately different human seams (`sdlc/lanes/design.md`):
 
 - the **UX track** (an optional module — only for forks that bind `<DESIGN_ARTIFACTS>` in their
   profile, and only when visual/UX design is still owed): build the competing storyboards/mockups,

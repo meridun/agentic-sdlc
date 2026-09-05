@@ -1,6 +1,6 @@
 # Label taxonomy
 
-The pipeline is driven entirely by GitHub labels. Create these once per repo.
+The `gh-issue` binding's marker substrate: every `stage:*` / `sdlc:*` / `priority:*` marker is a GitHub label. Create these once per repo.
 
 ## The labels
 
@@ -48,13 +48,13 @@ gh api -X POST repos/{owner}/{repo}/issues/<dependent#>/dependencies/blocked_by 
 ```
 
 Prose (`Depends on #n`) may stay as a human mirror; it is no longer authoritative. Existing prose
-migrates once with `node tools/sdlc.mjs deps --migrate` (dry run; `--apply` creates the edges —
-see `docs/Adoption.md` §4b).
+migrates once with `sdlc deps --migrate` (dry run; `--apply` creates the edges —
+see `docs/Adoption.md` § 4).
 
 ## Exactly one stage label per open issue
 
 Every open issue carries **exactly one** `stage:*` label — the pipeline invariant the dispatcher
-enforces (dispatch.md Step 0b). **Zero** stage labels makes an issue invisible to every lane
+enforces (`sdlc/dispatch.md` Step 0b). **Zero** stage labels makes an issue invisible to every lane
 forever (a triage escapee that will never be built or closed): the dispatcher auto-repairs it to
 `stage:intake` (verify-before-write) — intake is the safe re-entry, re-routing or reconciling from
 there. That covers the post-ship window too: ship's terminal ADVANCE removes `stage:ship` and the
@@ -105,4 +105,4 @@ gh label create "ready"   --color 0e8a16 --description "Every native blocker clo
 No dispatcher-lock issue exists in this model: there is no dispatcher singleton. Overlapping
 dispatch runs deconflict via per-issue claims, idempotent GitHub writes, and a per-machine
 filesystem lock (`.git/sdlc-maint.lock`) the dispatcher manages itself — nothing to create on the
-tracker. See `prompts/sdlc/dispatch.md` Step -1.
+tracker. See `sdlc/dispatch.md` Step -1.
