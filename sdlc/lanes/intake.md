@@ -192,9 +192,8 @@ the design worker — never write or edit those here.
   **Re-point dependents before a dup close.** A closed blocker satisfies its edges however it
   closed, so anything *blocked by* this issue would become eligible next cycle with the real
   prerequisite (the canonical issue) still open. Before closing: read this issue's `blocking`
-  edges (`gh api graphql` — `blocking { number state }`; with the CLI, `sweep`'s edge query is
-  the same shape), and for each **open** dependent add `blocked_by <canonical#>` (same REST call
-  as above, canonical's numeric id) and a `Depends on #<canonical>` line in its body. Name the
+  edges (`dep-read` in the *blocking* direction), and for each **open** dependent
+  `dep-edge <dependent> <canonical>` plus a `Depends on #<canonical>` line in its record. Name the
   re-pointed issues in the close rationale. A close for incoherence or out-of-scope re-points
   nothing — its dependents are genuinely unblocked, and the close sweep will tell their humans.
 
