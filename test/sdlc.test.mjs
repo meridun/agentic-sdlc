@@ -1440,8 +1440,10 @@ describe('parseProseDependencies (migration parser)', () => {
       'This does not depend on #1161 at all.',
       'Requires #12 again (dup)',
       'Blocked by #99 — self',
+      '**Dependencies:** Depends on K.3b #19', // roadmap-identifier form
+      '**Dependencies:** ~~Depends on K.3a #20~~ ✅ K.3a complete', // struck through — still an edge (closed blocker)
     ].join('\n');
-    assert.deepEqual(parseProseDependencies(body, 99), [12, 13, 14, 15, 16, 17]);
+    assert.deepEqual(parseProseDependencies(body, 99), [12, 13, 14, 15, 16, 17, 19, 20]);
   });
 
   it('takes only the leading run of references on a line', () => {
@@ -1509,11 +1511,18 @@ describe('runSdlc deps', () => {
         { number: 20, id: 2000, body: 'Depends on #10 and #21\nBlocked by #1337\nNone depends on #4242', blockedBy: [] },
         { number: 21, id: 2100, body: '' },
       ]),
-      [graphqlKey('CLOSED')]: graphqlPage([{ number: 10, id: 1000, state: 'CLOSED', closedAt: '2026-07-01T00:00:00Z' }]),
+      // A closed blocker is resolved by one REST lookup, not by paging the closed backlog.
+      'api repos/{owner}/{repo}/issues/10 --jq {id: .id, state: .state, pull_request: (.pull_request != null)}':
+        JSON.stringify({ id: 1000, state: 'closed', pull_request: false }),
+      // #1337 gets no canned response → parse failure → unknown → skipped.
     });
     const logs = [];
     runSdlc(['deps', '--migrate'], { gh, git: fakeExec(), log: (m) => logs.push(m) });
     const out = logs.join('\n');
+    // Bodies are requested only by the migration; the OPEN query for it carries `body`.
+    const graphqlCalls = gh.calls.filter((c) => c[0] === 'api' && c[1] === 'graphql');
+    assert.ok(graphqlCalls.every((c) => c.some((a) => /^query=/.test(a) && a.includes(' body'))));
+    assert.ok(!gh.calls.some((c) => c.includes('states=CLOSED')));
     assert.ok(out.includes('#20 blocked_by #10 (CLOSED)'));
     assert.ok(out.includes('#20 blocked_by #21 (OPEN)'));
     assert.ok(out.includes('skipped #20 → #1337'));
@@ -1551,8 +1560,9 @@ describe('runSdlc sweep (edge-based)', () => {
       assert.ok(out.includes('closed #10 (2026-07-10T00:00:00Z) A'));
       assert.ok(out.includes('dependent #30 [unblocked — blocked → ready] B'));
       assert.ok(out.includes('dependent #31 [still blocked by #30] C'));
-      // Read-only: no issue writes.
+      // Read-only: no issue writes; and no bodies requested (a closed backlog's bodies run to MBs).
       assert.equal(gh.calls.some((c) => c[0] === 'issue'), false);
+      assert.ok(!gh.calls.some((c) => c.some((a) => /^query=/.test(a) && a.includes(' body'))));
 
       runSdlc(['sweep', '--ack', '--state', statePath, '--window', 'x'], { gh, git: fakeExec(), log: (m) => logs.push(m) });
       assert.deepEqual(JSON.parse(fs.readFileSync(statePath, 'utf8')).sweptIssues, [10]);
