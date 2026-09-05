@@ -27,9 +27,9 @@
  * full-tree assertion is deliberately a CI step in the adopter, not a unit test
  * (a repo-wide lint can take tens of seconds).
  *
- *   node tools/check-lint-baseline.mjs              # check (CI + lane gate)
- *   node tools/check-lint-baseline.mjs --update     # re-baseline after a burn-down
- *   node tools/check-lint-baseline.mjs --baseline <path>   # non-default baseline file
+ *   node sdlc/tools/check-lint-baseline.mjs              # check (CI + lane gate)
+ *   node sdlc/tools/check-lint-baseline.mjs --update     # re-baseline after a burn-down
+ *   node sdlc/tools/check-lint-baseline.mjs --baseline <path>   # non-default baseline file
  *
  * Exit codes: 0 within baseline · 1 growth detected · 2 ESLint itself failed to
  * load or run (not a baseline verdict).
@@ -40,11 +40,11 @@ import path from 'path';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
 
-/** Repo root, resolved from this script's location (tools/ → ..). */
-export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+/** Repo root, resolved from this script's location (sdlc/tools/ → ../..). */
+export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-/** Default committed baseline: sibling of this script so it travels with `tools/`. */
-export const BASELINE_PATH = path.join(REPO_ROOT, 'tools', 'lint-baseline.json');
+/** Default committed baseline: sibling of this script so it travels with `sdlc/tools/`. */
+export const BASELINE_PATH = path.join(REPO_ROOT, 'sdlc', 'tools', 'lint-baseline.json');
 
 /**
  * Bucket key for severity-2 messages with no rule id — parse errors and config
@@ -54,7 +54,7 @@ export const FATAL_KEY = '(parse-error)';
 
 /**
  * Load the adopting repo's ESLint class. Resolved relative to `cwd` (not this
- * file) so a copied `tools/` finds the project's own devDependency.
+ * file) so a copied `sdlc/tools/` finds the project's own devDependency.
  * @param {string} [cwd=REPO_ROOT]
  * @returns {Promise<typeof import('eslint').ESLint>}
  */
@@ -163,7 +163,7 @@ export function total(counts) {
  * @param {string} [updateHint] - the command that re-baselines
  * @returns {{code:number, lines:string[]}}
  */
-export function reportCheck(counts, baseline, updateHint = 'node tools/check-lint-baseline.mjs --update') {
+export function reportCheck(counts, baseline, updateHint = 'node sdlc/tools/check-lint-baseline.mjs --update') {
   const { ok, violations, decreases } = compareToBaseline(counts, baseline);
   const lines = [];
   if (!ok) {

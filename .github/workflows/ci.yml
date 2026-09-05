@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      # Zero-dependency repo: no install step. Tests cover tools/sdlc.mjs and
-      # tools/check-lint-baseline.mjs (pure helpers; the ratchet's full-tree run
+      # Zero-dependency repo: no install step. Tests cover sdlc/bindings/gh-issue/sdlc.mjs and
+      # sdlc/tools/check-lint-baseline.mjs (pure helpers; the ratchet's full-tree run
       # is an adopter-side CI step — see docs/Adoption.md §4a).
       - run: node --test "test/*.test.mjs"

@@ -1,4 +1,4 @@
-// Tests for tools/sdlc.mjs — zero-dependency, node's built-in runner:
+// Tests for sdlc/bindings/gh-issue/sdlc.mjs — zero-dependency, node's built-in runner:
 //   node --test              (default discovery finds test/*.test.mjs)
 //   node --test "test/*.test.mjs"
 // (On Node ≥22 the positional arg is a glob, so a bare directory like
@@ -53,7 +53,7 @@ import {
   dupTokens,
   dupQueryTerms,
   scoreDupCandidates,
-} from '../tools/sdlc.mjs';
+} from '../sdlc/bindings/gh-issue/sdlc.mjs';
 
 /**
  * Build a fake gh/git executor that records calls and returns canned output.

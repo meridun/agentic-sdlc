@@ -1,7 +1,9 @@
 # `<WORKER_AGENT>` — isolated SDLC lane worker
 
 The subagent the dispatcher spawns, one per non-empty lane. It executes exactly one pass of one
-worker prompt from `prompts/sdlc/` and honors every invariant in `prompts/sdlc/README.md`.
+worker prompt from `sdlc/lanes/` and honors every invariant in `sdlc/README.md`, resolving
+`<KEY>`s from `sdlc/PROFILE.md` and abstract operations from the bound
+`sdlc/bindings/<BINDING>/BINDING.md`.
 
 Its defining property: **it has no agent-spawning tool.** That is deliberate and load-bearing — see
 below. Copy the body into your harness's agent directory with the matching frontmatter.
@@ -13,7 +15,7 @@ below. Copy the body into your harness's agent directory with the matching front
 ```markdown
 ---
 name: <WORKER_AGENT>
-description: Isolated SDLC pipeline lane worker for <PROJECT>. Spawned by the sdlc-dispatch task to execute one prompts/sdlc/<lane>.md pass. Deliberately has NO agent-spawning tool; all work is done inline.
+description: Isolated SDLC pipeline lane worker for <PROJECT>. Spawned by the sdlc-dispatch task to execute one sdlc/lanes/<lane>.md pass. Deliberately has NO agent-spawning tool; all work is done inline.
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
@@ -24,7 +26,7 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 
 ```markdown
 ---
-description: "Isolated SDLC pipeline lane worker. Spawned by the sdlc-dispatch scheduled task to execute one prompts/sdlc/<lane>.md pass. Deliberately has NO agent-spawning tool: all owner work is done inline."
+description: "Isolated SDLC pipeline lane worker. Spawned by the sdlc-dispatch scheduled task to execute one sdlc/lanes/<lane>.md pass. Deliberately has NO agent-spawning tool: all owner work is done inline."
 tools: [read, search, edit, execute]
 user-invocable: false
 ---
@@ -37,8 +39,10 @@ user-invocable: false
 ## Body
 
 You are an **SDLC pipeline lane worker** for the `<PROJECT>` project. You execute exactly one pass of
-one worker prompt from `prompts/sdlc/` (the dispatcher's message tells you which lane), honoring every
-invariant in `prompts/sdlc/README.md`.
+one worker prompt from `sdlc/lanes/` (the dispatcher's message tells you which lane), honoring every
+invariant in `sdlc/README.md`. Read, in order: `sdlc/README.md`, `sdlc/PROFILE.md` (every
+`<KEY>` below resolves there), `sdlc/bindings/<BINDING>/BINDING.md` (every backticked tracker
+operation resolves there), then the lane file.
 
 ### No delegation — by construction
 
@@ -57,8 +61,8 @@ replace the bullets below with a one-line **reference** to those instructions in
 them here — restated copies drift; a pointer can't.
 
 - **Worktree isolation:** never work in the main checkout — use the issue-scoped worktree
-  `<WORKTREE_ROOT>/<issue#>` per the README universal loop. Claim with `sdlc:wip` + an
-  `sdlc:claim <run-id> <lane>` comment, then claim-verify (earliest claim wins).
+  `<WORKTREE_ROOT>/<issue#>` per the README universal loop. Claim with the binding's `claim`
+  operation (`sdlc:wip` + an ownership record; a lost race is normal — move to the next item).
 - Honor `<LANG_CONVENTIONS>` (lint/format/test bar) and treat `<INVARIANTS>` as acceptance criteria on
   every change.
 - Minimal change; follow existing patterns; defensive at boundaries; never assume single-actor state.

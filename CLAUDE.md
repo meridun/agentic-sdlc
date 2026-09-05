@@ -16,7 +16,7 @@ This repo eats its own dog food: the flow is **`feature → dev → master`**, i
 ## What lives where
 
 - `docs/` — the *why*: model, invariants, composability spec, adoption guide.
-- `prompts/sdlc/` — executable worker prompts; `README.md` there is the binding universal
+- `sdlc/` — the copyable tree: `README.md` (core loop), `lanes/` (workers), `dispatch.md`, `bindings/<name>/` (tracker dialects), `PROFILE.md` (adopter-filled). `README.md` there is the binding universal
   worker loop, lane files define only WORK/EMIT specifics.
 - Keep the two in sync: a rule stated in `docs/AgenticSDLC.md`'s invariants must have its
-  operational counterpart in `prompts/sdlc/README.md` and any affected lane files.
+  operational counterpart in `sdlc/README.md` and any affected lane or binding files.

@@ -92,5 +92,5 @@ One-line result: `AUDIT: <#issue> → ADVANCE(ship)|BOUNCE(build)|PARK — <reas
   An item rewound here by a human with a still-valid clean report → re-confirm cheaply and ADVANCE,
   unless their rewind comment names a reason to distrust it — then re-audit that part. Evidence that
   the work already shipped (merged PR) → PARK with the evidence for a human to close.
-- Audit **commits nothing and cuts no branch** — it reads build's branch and relabels.
-- Honors the universal worker loop in [`README.md`](README.md).
+- Audit **commits nothing and cuts no branch** — it reads build's branch and re-stages.
+- Honors the universal worker loop in [`../README.md`](../README.md).
