@@ -245,7 +245,7 @@ their own body sections and always preserve the original author text at the top.
 | File | Stage | Notes |
 |---|---|---|
 | [`dispatch.md`](dispatch.md) | *(dispatcher — runs every lane)* | scheduled task; git/worktree maintenance + per-lane fan-out |
-| [`intake.md`](intake.md) | `stage:intake` → `stage:design` *(or `stage:verify`, already-built floor)* | triage, dedup, requirements + AC authoring, decision debates + close sweep |
+| [`intake.md`](intake.md) | `stage:intake` → `stage:design` *(or `stage:verify`, already-built floor)* | triage, dedup, dependency edges, requirements + AC authoring, decision debates + close sweep |
 | [`design.md`](design.md) | `stage:design` → `stage:queued` | standard phase: implementation plan (spec track) for every item; optional UX track |
 | [`build.md`](build.md) | `stage:build` → `stage:verify` | execute the reviewed plan → implement + targeted tests |
 | [`verify.md`](verify.md) | `stage:verify` → `stage:audit` | full suite + real-run smoke |
@@ -273,3 +273,16 @@ after its last blocker closes. A `Depends on #n` line is a human mirror it ignor
 `blocked` / `ready` labels are **derived** from the edges by `sdlc deps --apply` each cycle and
 are never read by the machine — so never set them by hand as a substitute for the edge. Native
 edges are per-repo: a cross-repo blocker is `sdlc:hold` + the prose line, stated in the comment.
+
+**Prose declarations are converted, not trusted.** `sdlc deps --migrate --apply` turns the body's
+`Depends on #n` / `**Dependencies:** …` lines into edges; it is not part of `cycle-prep`, so an
+issue filed after adoption carries its prose dependencies to intake, which converts them (its
+WORK step). Until that happens the gate cannot see them.
+
+**Closing a blocker satisfies its edges — so re-point before a dup close.** An edge whose blocker
+is closed never blocks (`openBlockers`), however it closed. When a lane closes an issue as a
+duplicate of a *still-open* canonical issue, every issue *blocking*-linked to the dup would
+become eligible on the next cycle with its real prerequisite unmet. Before the close, read the
+dup's `blocking` edges (`gh api graphql` — `blocking { number state }`) and add
+`blocked_by <canonical#>` to each open dependent; then close. Closing on a merged PR needs no
+re-pointing — the work landed.
