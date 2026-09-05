@@ -83,10 +83,11 @@ All inline, read-only (no code changes, no branches):
 - **Dependency edges** (the one write-through-`gh` besides labels; runs whenever any step here
   finds an ordering):
   1. **Convert the author's prose first.** A body line such as `Depends on #n`, `Blocked by: #n`,
-     or `**Dependencies:** …` is a declaration the gate cannot see — `sdlc deps --migrate` is an
-     adoption-time pass, not a per-cycle one. With the reference CLI, `node tools/sdlc.mjs deps
-     --migrate --apply` converts every open issue's prose lines (idempotent; this issue's are
-     among them). Without it, create each edge by hand.
+     or `**Dependencies:** …` is a declaration the gate cannot see until it is an edge. The
+     dispatcher's `cycle-prep --apply` converts them each cycle, but an issue filed or edited
+     since then (or a manual run) reaches you unconverted. With the reference CLI,
+     `node tools/sdlc.mjs deps --migrate --apply` converts every open issue's prose lines
+     (idempotent; this issue's are among them). Without it, create each edge by hand.
   2. **Create the edge** for each ordering found in the dedup search or the collision sweep —
      this issue *blocked by* #n:
      `gh api -X POST repos/{owner}/{repo}/issues/<this#>/dependencies/blocked_by -F issue_id=$(gh api repos/{owner}/{repo}/issues/<n> --jq .id)`

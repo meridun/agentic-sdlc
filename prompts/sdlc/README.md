@@ -275,9 +275,10 @@ are never read by the machine — so never set them by hand as a substitute for 
 edges are per-repo: a cross-repo blocker is `sdlc:hold` + the prose line, stated in the comment.
 
 **Prose declarations are converted, not trusted.** `sdlc deps --migrate --apply` turns the body's
-`Depends on #n` / `**Dependencies:** …` lines into edges; it is not part of `cycle-prep`, so an
-issue filed after adoption carries its prose dependencies to intake, which converts them (its
-WORK step). Until that happens the gate cannot see them.
+`Depends on #n` / `**Dependencies:** …` lines into edges. `cycle-prep` runs it every cycle (the
+`=== deps-migrate ===` section) and intake runs it again in its WORK step, so a declaration is
+converted by whichever comes first; between filing and that first conversion the gate cannot see
+it, and a reference to an issue outside this repo is never converted (`sdlc:hold` + prose).
 
 **Closing a blocker satisfies its edges — so re-point before a dup close.** An edge whose blocker
 is closed never blocks (`openBlockers`), however it closed. When a lane closes an issue as a
