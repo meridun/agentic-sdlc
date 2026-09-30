@@ -1,3 +1,9 @@
+> **Archived (2026-09-30).** This repository is retired. The canonical agentic SDLC spec, prompts,
+> bindings (`gh-issue`, `ado-feature`, `ado-pbi`) and worked profiles now live in
+> [meridun/model-repo](https://github.com/meridun/model-repo) under `sdlc/` and
+> `docs/Development_Sdlc*.md`. Open work moved to model-repo issues #14, #15 and #16. Nothing here
+> will be updated; downstream forks should pin model-repo instead.
+
 # agentic-sdlc
 
 A portable, project-agnostic **agentic SDLC pipeline**: a set of prompts and agent definitions
